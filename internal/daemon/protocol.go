@@ -3,7 +3,6 @@ package daemon
 import (
 	"encoding/json"
 	"io"
-	"sync"
 	"time"
 
 	"timeshare/internal/config"
@@ -35,21 +34,32 @@ func WriteMessage(w io.Writer, v any) error {
 	return enc.Encode(v)
 }
 
-var (
-	decoderMu sync.Mutex
-	decoders  = make(map[io.Reader]*json.Decoder)
-)
-
-// ReadMessage decodes one JSON line into v. It caches decoders per reader
-// to correctly handle multiple messages on a single stream.
+// ReadMessage decodes one JSON line into v. It reads one byte at a time
+// (no bufio.Reader) so it never consumes bytes past the trailing newline of
+// its own message: a buffered reader created fresh per call would pull
+// whatever is already available from r into its internal buffer, silently
+// discarding any bytes beyond the first line's boundary and losing
+// subsequent messages on streams that carry more than one (e.g. a
+// bytes.Buffer, or a socket where the OS coalesces two writes). Reading
+// stateless keeps ReadMessage safe to call any number of times on any
+// io.Reader without tracking state between calls.
 func ReadMessage(r io.Reader, v any) error {
-	decoderMu.Lock()
-	dec, ok := decoders[r]
-	if !ok {
-		dec = json.NewDecoder(r)
-		decoders[r] = dec
+	var line []byte
+	b := make([]byte, 1)
+	for {
+		n, err := r.Read(b)
+		if n > 0 {
+			line = append(line, b[0])
+			if b[0] == '\n' {
+				break
+			}
+		}
+		if err != nil {
+			if err == io.EOF && len(line) > 0 {
+				break
+			}
+			return err
+		}
 	}
-	decoderMu.Unlock()
-
-	return dec.Decode(v)
+	return json.Unmarshal(line, v)
 }
