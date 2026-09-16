@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -10,6 +12,7 @@ import (
 
 	"timeshare/internal/backend"
 	"timeshare/internal/cache"
+	"timeshare/internal/config"
 	"timeshare/internal/daemon"
 )
 
@@ -35,10 +38,17 @@ func main() {
 
 	srv := &daemon.Server{
 		Cache: cache.New(time.Now),
-		// Backend dispatch by request.Mode is added in Task 11 once both
-		// OnePassword backends exist; until then this daemon build is not
-		// wired to a real backend selector.
-		Backend: backend.Backend(nil),
+		Backend: &daemon.ModeDispatcher{
+			Biometric: backend.NewOnePasswordBiometric(),
+			ServiceAccount: func(token string) interface {
+				Resolve(ctx context.Context, cfg config.Config, secretName string) (string, time.Duration, error)
+			} {
+				return backend.NewOnePasswordServiceAccount(token)
+			},
+			TokenForVault: func(vault string) (string, error) {
+				return "", fmt.Errorf("service-account token storage not yet implemented")
+			},
+		},
 	}
 
 	log.Printf("timesharedd: listening on %s", *sockPath)
