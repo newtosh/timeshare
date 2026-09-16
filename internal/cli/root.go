@@ -30,8 +30,10 @@ func LoadProjectContext(cwd string) (config.Config, string, error) {
 
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "timeshare",
-		Short: "Repo-scoped, TTL-cached secret bridge for 1Password",
+		Use:           "timeshare",
+		Short:         "Repo-scoped, TTL-cached secret bridge for 1Password",
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 	root.AddCommand(newReadCmd())
 	root.AddCommand(newRunCmd())

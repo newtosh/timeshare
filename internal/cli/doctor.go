@@ -20,35 +20,47 @@ func newDoctorCmd() *cobra.Command {
 		Use:   "doctor",
 		Short: "Diagnose timeshare and 1Password CLI health",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			check("op CLI installed", func() error {
+			failed := 0
+			if !check("op CLI installed", func() error {
 				_, err := exec.LookPath("op")
 				return err
-			})
-			check("daemon socket reachable", func() error {
+			}) {
+				failed++
+			}
+			if !check("daemon socket reachable", func() error {
 				c := &client.Client{SocketPath: client.DefaultSocketPath()}
 				conn, err := c.PingSocket(cmd.Context())
 				if err == nil {
 					conn.Close()
 				}
 				return err
-			})
-			check(".timeshare.yml found", func() error {
+			}) {
+				failed++
+			}
+			if !check(".timeshare.yml found", func() error {
 				cwd, err := os.Getwd()
 				if err != nil {
 					return err
 				}
 				_, _, err = LoadProjectContext(cwd)
 				return err
-			})
+			}) {
+				failed++
+			}
+			if failed > 0 {
+				return fmt.Errorf("%d check(s) failed", failed)
+			}
 			return nil
 		},
 	}
 }
 
-func check(name string, fn func() error) {
+// check runs fn, prints a pass/fail line, and reports whether it passed.
+func check(name string, fn func() error) bool {
 	if err := fn(); err != nil {
 		fmt.Println(failStyle.Render("✗ "+name) + ": " + err.Error())
-		return
+		return false
 	}
 	fmt.Println(passStyle.Render("✓ " + name))
+	return true
 }

@@ -135,7 +135,11 @@ func (s *Server) resolve(req Request) Response {
 		return Response{Error: err.Error()}
 	}
 
-	if ttl <= 0 {
+	// The backend's TTL is a ceiling (e.g. it mirrors 1Password's own
+	// session window for Mode B); the configured/override TTL wins when
+	// it's shorter, so `--ttl` and the config's ttl are never silently
+	// ignored.
+	if req.TTL > 0 && (ttl <= 0 || req.TTL < ttl) {
 		ttl = req.TTL
 	}
 	s.Cache.Set(key, value, ttl)

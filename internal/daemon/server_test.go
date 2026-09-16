@@ -156,7 +156,47 @@ func TestCrossProjectCacheIsolation(t *testing.T) {
 	}
 }
 
-func TestStatusListsLiveEntriesForProject(t *testing.T) {
+func TestConfiguredTTLOverridesLongerBackendTTL(t *testing.T) {
+	// Regression test for the resolve() precedence bug: a backend TTL of
+	// an hour must not shadow a five-minute req.TTL (the config/--ttl
+	// value). We drive a fake clock directly through the Cache (see
+	// cache_test.go's pattern) rather than dialServer's hardcoded
+	// cache.New(time.Now), since dialServer takes an already-built
+	// *Server and never constructs the Cache itself.
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	clock := func() time.Time { return now }
+
+	mock := &backendtest.Mock{ValueFor: map[string]string{"X": "v"}, TTL: time.Hour}
+	srv := &Server{Cache: cache.New(clock), Backend: mock}
+	conn := dialServer(t, srv)
+
+	req := Request{ProjectID: "p", SecretName: "X", AllowedItems: []string{"X"}, TTL: 5 * time.Minute}
+	if err := WriteMessage(conn, req); err != nil {
+		t.Fatal(err)
+	}
+	var resp Response
+	if err := ReadMessage(conn, &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Error != "" {
+		t.Fatalf("unexpected error: %s", resp.Error)
+	}
+
+	// Still within the 5-minute req.TTL: cache hit.
+	now = now.Add(4 * time.Minute)
+	if _, ok := srv.Cache.Get("p\x00X"); !ok {
+		t.Fatal("expected cache hit before the shorter configured TTL elapses")
+	}
+
+	// Past the 5-minute req.TTL but well within the backend's 1-hour TTL:
+	// if the backend TTL had won (the bug), this would still be a hit.
+	now = now.Add(2 * time.Minute) // total 6 minutes since Set
+	if _, ok := srv.Cache.Get("p\x00X"); ok {
+		t.Fatal("expected entry expired at the shorter configured TTL, not the longer backend TTL")
+	}
+}
+
+func TestStatusOpReturnsNoError(t *testing.T) {
 	mock := &backendtest.Mock{ValueFor: map[string]string{"X": "v"}, TTL: time.Hour}
 	srv := &Server{Cache: cache.New(time.Now), Backend: mock}
 	conn := dialServer(t, srv)

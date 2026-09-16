@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -9,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"timeshare/internal/backend"
 	"timeshare/internal/cache"
@@ -26,6 +29,23 @@ func main() {
 	if err := os.MkdirAll(filepath.Dir(*sockPath), 0o700); err != nil {
 		log.Fatalf("timesharedd: creating socket dir: %v", err)
 	}
+
+	// Guard the double-spawn race: two CLI invocations racing to spawn a
+	// daemon must not both win. An exclusive, non-blocking flock on a
+	// lockfile beside the socket means only one daemon ever holds the
+	// socket at a time; a second one backs off instead of stealing it out
+	// from under a first daemon that's still holding decrypted secrets in
+	// memory.
+	lockFile, err := os.OpenFile(*sockPath+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		log.Fatalf("timesharedd: opening lockfile: %v", err)
+	}
+	if err := unix.Flock(int(lockFile.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		log.Print("timesharedd: another daemon already holds the lock for this socket, exiting")
+		return
+	}
+	defer lockFile.Close()
+
 	os.Remove(*sockPath) // clear a stale socket from a previous crashed run
 
 	ln, err := net.Listen("unix", *sockPath)
@@ -53,5 +73,11 @@ func main() {
 	}
 
 	log.Printf("timesharedd: listening on %s", *sockPath)
-	log.Fatal(srv.Serve(ln))
+	if err := srv.Serve(ln); err != nil {
+		if errors.Is(err, daemon.ErrIdleTimeout) {
+			log.Print("timesharedd: idle timeout reached, exiting")
+			os.Exit(0)
+		}
+		log.Fatalf("timesharedd: %v", err)
+	}
 }

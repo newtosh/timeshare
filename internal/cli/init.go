@@ -29,13 +29,18 @@ func newInitCmd() *cobra.Command {
 	var mode string
 	var ttl string
 	var moveFrom string
+	var explicitItems []string
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Scaffold a dedicated vault, service account, and .timeshare.yml for this repo",
+		Short: "Scaffold a dedicated vault and .timeshare.yml for this repo",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if vaultName == "" {
 				return fmt.Errorf("--vault is required (e.g. --vault=project-x-secrets)")
+			}
+			if moveFrom == "" && len(explicitItems) == 0 {
+				return fmt.Errorf("at least one of --move-from or --item is required (a config with an empty items list will never load)")
 			}
 			parsedTTL, err := time.ParseDuration(ttl)
 			if err != nil {
@@ -47,13 +52,18 @@ func newInitCmd() *cobra.Command {
 				return err
 			}
 
+			cfgPath := filepath.Join(cwd, ".timeshare.yml")
+			if _, err := os.Stat(cfgPath); err == nil && !force {
+				return fmt.Errorf("%s already exists (pass --force to overwrite)", cfgPath)
+			}
+
 			fmt.Printf("Creating dedicated vault %q...\n", vaultName)
 			vaultID, err := onepassword.CreateVault(vaultName)
 			if err != nil {
 				return fmt.Errorf("creating vault: %w", err)
 			}
 
-			var items []string
+			items := append([]string{}, explicitItems...)
 			if moveFrom != "" {
 				existing, err := onepassword.ListItems(moveFrom)
 				if err != nil {
@@ -62,7 +72,7 @@ func newInitCmd() *cobra.Command {
 				for _, itemName := range existing {
 					fmt.Printf("Moving %q into %q...\n", itemName, vaultName)
 					if err := onepassword.MoveItem(itemName, moveFrom, vaultName); err != nil {
-						return fmt.Errorf("moving item %q (partial migration — check both vaults): %w", itemName, err)
+						return fmt.Errorf("moving item %q failed (already moved: %v): %w", itemName, items, err)
 					}
 					items = append(items, itemName)
 				}
@@ -76,18 +86,11 @@ func newInitCmd() *cobra.Command {
 			}
 
 			if mode == string(config.ModeServiceAccount) {
-				fmt.Println("Creating read-only service account...")
-				token, err := onepassword.CreateServiceAccount(vaultID, vaultName+"-timeshare")
-				if err != nil {
-					return fmt.Errorf("creating service account: %w", err)
-				}
-				fmt.Println("Service account token created. Store it now — it will not be shown again.")
-				fmt.Println("Run: op user get --me  # then save via your OS keychain of choice, e.g.:")
-				fmt.Printf("  timeshare-store-token --vault=%s\n", vaultName)
-				_ = token // consumed by the not-yet-built token-storage step (tracked as follow-up)
+				fmt.Println("Service-account token storage isn't implemented yet. Create one yourself:")
+				fmt.Printf("  op service-account create %s --vault=%s:read_items\n", vaultName+"-timeshare", vaultID)
+				fmt.Println("Store the printed token in your OS keychain — timesharedd will look it up once token storage lands.")
 			}
 
-			cfgPath := filepath.Join(cwd, ".timeshare.yml")
 			if err := writeTimeshareConfig(cfgPath, cfg); err != nil {
 				return fmt.Errorf("writing .timeshare.yml: %w", err)
 			}
@@ -101,5 +104,7 @@ func newInitCmd() *cobra.Command {
 	cmd.Flags().StringVar(&mode, "mode", string(config.ModeBiometric), "service-account or biometric")
 	cmd.Flags().StringVar(&ttl, "ttl", "4h", "default cache TTL for this project")
 	cmd.Flags().StringVar(&moveFrom, "move-from", "", "existing vault to move current items out of (optional)")
+	cmd.Flags().StringArrayVar(&explicitItems, "item", nil, "item name to include in .timeshare.yml (repeatable)")
+	cmd.Flags().BoolVar(&force, "force", false, "overwrite an existing .timeshare.yml")
 	return cmd
 }

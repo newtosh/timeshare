@@ -12,7 +12,7 @@ type Mode string
 
 const (
 	ModeServiceAccount Mode = "service-account"
-	ModeBiometric       Mode = "biometric"
+	ModeBiometric      Mode = "biometric"
 )
 
 type Config struct {

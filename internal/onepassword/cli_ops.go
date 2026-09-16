@@ -83,25 +83,3 @@ func ListItems(vault string) ([]string, error) {
 	}
 	return titles, nil
 }
-
-// CreateServiceAccount provisions a read-only service account scoped to
-// vaultID and returns its bearer token. 1Password service-account grants
-// are immutable after creation (spec: Key decisions) — there is
-// deliberately no AddVaultAccess function; broadening access means
-// re-running init against a fresh vault, not mutating this one.
-func CreateServiceAccount(vaultID, name string) (string, error) {
-	out, err := runOp("service-account", "create", name,
-		"--vault="+vaultID+":read_items",
-		"--format=json",
-	)
-	if err != nil {
-		return "", err
-	}
-	var result struct {
-		Token string `json:"token"`
-	}
-	if err := json.Unmarshal(out, &result); err != nil {
-		return "", fmt.Errorf("parsing op service-account create output: %w", err)
-	}
-	return result.Token, nil
-}

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -51,7 +52,14 @@ func newRunCmd() *cobra.Command {
 			child.Stdin = os.Stdin
 			child.Stdout = os.Stdout
 			child.Stderr = os.Stderr
-			return child.Run()
+			if err := child.Run(); err != nil {
+				var ee *exec.ExitError
+				if errors.As(err, &ee) {
+					os.Exit(ee.ExitCode())
+				}
+				return err
+			}
+			return nil
 		},
 	}
 }

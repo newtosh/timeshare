@@ -7,7 +7,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"timeshare/internal/client"
-	"timeshare/internal/daemon"
 )
 
 var okStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
@@ -21,16 +20,22 @@ func newStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cfg, projectID, err := LoadProjectContext(cwd)
+			cfg, _, err := LoadProjectContext(cwd)
 			if err != nil {
 				return err
 			}
 
-			c := &client.Client{SocketPath: client.DefaultSocketPath(), DaemonBinary: daemonBinaryPath()}
-			_, err = c.Read(cmd.Context(), daemon.Request{ProjectID: projectID, AllowedItems: cfg.Items, Op: daemon.OpStatus})
+			// status is a diagnostic probe: it must never spawn the daemon
+			// it's supposed to be reporting on, so it dials the raw socket
+			// (PingSocket) instead of going through client.Read's
+			// spawn-on-failure path.
+			c := &client.Client{SocketPath: client.DefaultSocketPath()}
+			conn, err := c.PingSocket(cmd.Context())
 			if err != nil {
-				return fmt.Errorf("daemon unreachable: %w", err)
+				fmt.Println("daemon not running")
+				return nil
 			}
+			conn.Close()
 
 			fmt.Println(okStyle.Render("✓") + fmt.Sprintf(" daemon reachable for vault %q (%d items configured)", cfg.Vault, len(cfg.Items)))
 			return nil
