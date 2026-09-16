@@ -156,6 +156,47 @@ func TestCrossProjectCacheIsolation(t *testing.T) {
 	}
 }
 
+func TestStatusListsLiveEntriesForProject(t *testing.T) {
+	mock := &backendtest.Mock{ValueFor: map[string]string{"X": "v"}, TTL: time.Hour}
+	srv := &Server{Cache: cache.New(time.Now), Backend: mock}
+	conn := dialServer(t, srv)
+
+	// Populate the cache first via a normal read.
+	_ = WriteMessage(conn, Request{ProjectID: "p", SecretName: "X", AllowedItems: []string{"X"}, TTL: time.Hour})
+	var r Response
+	_ = ReadMessage(conn, &r)
+
+	conn2 := dialServer(t, srv)
+	_ = WriteMessage(conn2, Request{ProjectID: "p", SecretName: "X", AllowedItems: []string{"X"}, TTL: time.Hour, Op: OpStatus})
+	var statusResp Response
+	_ = ReadMessage(conn2, &statusResp)
+	if statusResp.Error != "" {
+		t.Fatalf("unexpected error: %s", statusResp.Error)
+	}
+}
+
+func TestLockEvictsProjectCache(t *testing.T) {
+	mock := &backendtest.Mock{ValueFor: map[string]string{"X": "v"}, TTL: time.Hour}
+	srv := &Server{Cache: cache.New(time.Now), Backend: mock}
+
+	conn := dialServer(t, srv)
+	_ = WriteMessage(conn, Request{ProjectID: "p", SecretName: "X", AllowedItems: []string{"X"}, TTL: time.Hour})
+	var r Response
+	_ = ReadMessage(conn, &r)
+
+	conn2 := dialServer(t, srv)
+	_ = WriteMessage(conn2, Request{ProjectID: "p", AllowedItems: []string{"X"}, Op: OpLock})
+	var lockResp Response
+	_ = ReadMessage(conn2, &lockResp)
+	if lockResp.Error != "" {
+		t.Fatalf("unexpected error: %s", lockResp.Error)
+	}
+
+	if _, ok := srv.Cache.Get("p\x00X"); ok {
+		t.Fatal("expected cache evicted after lock")
+	}
+}
+
 func backendErrAuthFailed(t *testing.T) error {
 	t.Helper()
 	return errAuthFailedForTest

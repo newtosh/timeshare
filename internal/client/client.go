@@ -55,6 +55,13 @@ func (c *Client) Read(ctx context.Context, req daemon.Request) (string, error) {
 	return resp.Value, nil
 }
 
+// PingSocket dials the daemon socket without spawning one if it's absent,
+// for diagnostic use (timeshare doctor).
+func (c *Client) PingSocket(ctx context.Context) (net.Conn, error) {
+	var d net.Dialer
+	return d.DialContext(ctx, "unix", c.SocketPath)
+}
+
 func (c *Client) dial(ctx context.Context) (net.Conn, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "unix", c.SocketPath)

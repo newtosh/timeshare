@@ -49,6 +49,7 @@ func main() {
 				return "", fmt.Errorf("service-account token storage not yet implemented")
 			},
 		},
+		IdleTimeout: 30 * time.Minute,
 	}
 
 	log.Printf("timesharedd: listening on %s", *sockPath)

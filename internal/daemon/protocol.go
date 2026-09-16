@@ -20,7 +20,19 @@ type Request struct {
 	Mode         config.Mode   `json:"mode"`
 	TTL          time.Duration `json:"ttl"`
 	AllowedItems []string      `json:"allowed_items"`
+	Op           Op            `json:"op,omitempty"`
 }
+
+// Op selects which operation the daemon performs for a Request. The zero
+// value (OpRead) keeps every existing Request literal from Tasks 1-11 valid
+// without changes.
+type Op string
+
+const (
+	OpRead   Op = "" // default/zero value keeps existing Request literals valid
+	OpStatus Op = "status"
+	OpLock   Op = "lock"
+)
 
 type Response struct {
 	Value     string    `json:"value,omitempty"`

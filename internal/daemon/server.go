@@ -2,32 +2,78 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net"
+	"time"
 
 	"timeshare/internal/backend"
 	"timeshare/internal/cache"
 	"timeshare/internal/config"
 )
 
+// ErrIdleTimeout is returned by Serve when IdleTimeout elapses with no
+// accepted connections. cmd/timesharedd treats this as a clean exit, not a
+// crash — the next CLI invocation respawns the daemon (spec: Components —
+// daemon idle-timeout self-exit).
+var ErrIdleTimeout = errors.New("daemon idle timeout reached")
+
 // Server is the daemon's connection handler. One Server instance backs the
 // whole per-user daemon process; it serves every project via the
 // project_id-prefixed cache key (spec: Architecture — one daemon per OS
 // user, not per project).
 type Server struct {
-	Cache   *cache.Cache
-	Backend backend.Backend
+	Cache       *cache.Cache
+	Backend     backend.Backend
+	IdleTimeout time.Duration // zero means never self-exit
 }
 
-// Serve accepts connections on ln until it errors (e.g. listener closed).
+// Serve accepts connections on ln until it errors (e.g. listener closed) or,
+// if IdleTimeout is set, until that much time passes with no new connection.
 func (s *Server) Serve(ln net.Listener) error {
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			return err
+	connCh := make(chan net.Conn)
+	errCh := make(chan error, 1)
+
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				errCh <- err
+				return
+			}
+			connCh <- conn
 		}
-		go s.HandleConn(conn)
+	}()
+
+	idleTimer := s.newIdleTimer()
+	for {
+		select {
+		case conn := <-connCh:
+			if idleTimer != nil {
+				idleTimer.Stop()
+			}
+			go s.HandleConn(conn)
+			idleTimer = s.newIdleTimer()
+		case err := <-errCh:
+			return err
+		case <-s.idleTimerC(idleTimer):
+			return ErrIdleTimeout
+		}
 	}
+}
+
+func (s *Server) newIdleTimer() *time.Timer {
+	if s.IdleTimeout <= 0 {
+		return nil
+	}
+	return time.NewTimer(s.IdleTimeout)
+}
+
+func (s *Server) idleTimerC(t *time.Timer) <-chan time.Time {
+	if t == nil {
+		return nil // nil channel blocks forever in select, i.e. "no idle timeout"
+	}
+	return t.C
 }
 
 // HandleConn processes exactly one request/response exchange, then closes
@@ -54,6 +100,19 @@ func (s *Server) HandleConn(conn net.Conn) {
 }
 
 func (s *Server) resolve(req Request) Response {
+	switch req.Op {
+	case OpLock:
+		s.Cache.Evict(req.ProjectID + "\x00")
+		return Response{}
+	case OpStatus:
+		// v1: confirms the daemon/cache is reachable for this project; per-
+		// entry TTL listing is deferred until Cache exposes an enumeration
+		// method (Cache.Get/Set/Evict cover read/write/evict, not listing,
+		// and adding one only for `status` isn't worth it until a second
+		// caller needs it too).
+		return Response{}
+	}
+
 	allowed := false
 	for _, item := range req.AllowedItems {
 		if item == req.SecretName {
