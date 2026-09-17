@@ -519,7 +519,7 @@ git commit -m "feat: add pure step-block rendering for the init wizard"
 - Consumes: `wizardState` (Task 1), `onepassword.CreateVault/ListItems/MoveItem/GetItem`, `config.Config`, `writeTimeshareConfig` (already exists)
 - Produces: `runInit(cwd string, s *wizardState) error`
 
-This task's job is a **behavior-preserving refactor**: extract the vault-creation/item-move/config-write logic (currently inline in `RunE`) into a standalone `runInit` function driven by `*wizardState` instead of closure-captured flag variables. `RunE` itself is not rewired to the new entry-mode dispatch yet — that's Task 7. For this task, `RunE` still does exactly what it does today, just by constructing a `wizardState` from the parsed flags and calling `runInit`, so the existing tests keep passing unchanged.
+This task's job is a **behavior-preserving refactor**: extract the vault-creation/item-move/config-write logic (currently inline in `RunE`) into a standalone `runInit` function driven by `*wizardState` instead of closure-captured flag variables. `RunE` itself is not rewired to the new entry-mode dispatch yet — that's Task 8. For this task, `RunE` still does exactly what it does today, just by constructing a `wizardState` from the parsed flags and calling `runInit`, so the existing tests keep passing unchanged.
 
 - [ ] **Step 1: Confirm the existing behavior test still describes today's contract**
 
