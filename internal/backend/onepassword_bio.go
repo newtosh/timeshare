@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/config"
 )
 
 // defaultBiometricTTL matches 1Password's own documented CLI session

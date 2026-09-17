@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/config"
 )
 
 // ErrAuthFailed indicates the backend could not authenticate (bad or

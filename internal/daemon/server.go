@@ -7,9 +7,9 @@ import (
 	"net"
 	"time"
 
-	"timeshare/internal/backend"
-	"timeshare/internal/cache"
-	"timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/backend"
+	"github.com/newtosh/timeshare/internal/cache"
+	"github.com/newtosh/timeshare/internal/config"
 )
 
 // ErrIdleTimeout is returned by Serve when IdleTimeout elapses with no

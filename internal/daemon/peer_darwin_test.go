@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"timeshare/internal/backend/backendtest"
-	"timeshare/internal/cache"
+	"github.com/newtosh/timeshare/internal/backend/backendtest"
+	"github.com/newtosh/timeshare/internal/cache"
 )
 
 // TestVerifyPeerAcceptsSameUID proves the happy path end to end: a same-UID

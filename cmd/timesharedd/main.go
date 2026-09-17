@@ -12,11 +12,11 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"timeshare/internal/backend"
-	"timeshare/internal/cache"
-	"timeshare/internal/config"
-	"timeshare/internal/daemon"
-	"timeshare/internal/tokenstore"
+	"github.com/newtosh/timeshare/internal/backend"
+	"github.com/newtosh/timeshare/internal/cache"
+	"github.com/newtosh/timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/daemon"
+	"github.com/newtosh/timeshare/internal/tokenstore"
 )
 
 func main() {

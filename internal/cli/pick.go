@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"timeshare/internal/onepassword"
+	"github.com/newtosh/timeshare/internal/onepassword"
 
 	"github.com/charmbracelet/huh"
 )

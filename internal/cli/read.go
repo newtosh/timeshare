@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"timeshare/internal/client"
-	"timeshare/internal/daemon"
+	"github.com/newtosh/timeshare/internal/client"
+	"github.com/newtosh/timeshare/internal/daemon"
 
 	"github.com/spf13/cobra"
 )

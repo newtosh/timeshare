@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	"timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/config"
 )
 
 // Request is sent by the CLI client to the daemon. The client resolves

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/config"
 )
 
 // ModeDispatcher selects a Backend implementation per-request based on

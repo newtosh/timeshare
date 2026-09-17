@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/config"
 
 	onepassword "github.com/1password/onepassword-sdk-go"
 )

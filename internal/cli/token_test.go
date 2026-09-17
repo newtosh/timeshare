@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"timeshare/internal/tokenstore"
+	"github.com/newtosh/timeshare/internal/tokenstore"
 
 	"github.com/zalando/go-keyring"
 )

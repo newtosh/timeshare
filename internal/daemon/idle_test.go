@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"timeshare/internal/backend/backendtest"
-	"timeshare/internal/cache"
+	"github.com/newtosh/timeshare/internal/backend/backendtest"
+	"github.com/newtosh/timeshare/internal/cache"
 )
 
 func TestServerExitsAfterIdleTimeout(t *testing.T) {

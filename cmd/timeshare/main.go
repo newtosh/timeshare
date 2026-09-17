@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"timeshare/internal/cli"
+	"github.com/newtosh/timeshare/internal/cli"
 )
 
 func main() {
