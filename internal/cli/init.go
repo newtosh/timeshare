@@ -158,26 +158,46 @@ func newInitCmd() *cobra.Command {
 	var explicitItems []string
 	var moveItems []string
 	var force bool
+	var nonInteractive bool
 
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Scaffold a dedicated vault and .timeshare.yml for this repo",
+		Short: "Scaffold a dedicated vault and .timeshare.yml for this repo — guided wizard if no flags are given",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
 			if err != nil {
 				return err
 			}
 			s := newWizardState(cmd, vaultName, mode, ttl, moveFrom, explicitItems, moveItems, force)
-			return runInit(cwd, s)
+
+			if nonInteractive {
+				return runInit(cwd, s)
+			}
+
+			cfgPath := filepath.Join(cwd, ".timeshare.yml")
+			existingCfg, exists, loadErr := loadExistingConfig(cfgPath)
+			if loadErr != nil {
+				return fmt.Errorf("reading existing %s: %w", cfgPath, loadErr)
+			}
+			if exists {
+				return runExistingConfigMenu(cwd, cfgPath, existingCfg)
+			}
+
+			completed, err := runWizard(cwd, s)
+			if err != nil {
+				return err
+			}
+			return runInit(cwd, completed)
 		},
 	}
 
-	cmd.Flags().StringVar(&vaultName, "vault", "", "name for the new dedicated vault")
-	cmd.Flags().StringVar(&mode, "mode", string(config.ModeBiometric), "service-account or biometric")
-	cmd.Flags().StringVar(&ttl, "ttl", "4h", "default cache TTL for this project")
+	cmd.Flags().StringVarP(&vaultName, "vault", "v", "", "name for the new dedicated vault")
+	cmd.Flags().StringVarP(&mode, "mode", "m", string(config.ModeBiometric), "service-account or biometric")
+	cmd.Flags().StringVarP(&ttl, "ttl", "t", "4h", "default cache TTL for this project")
 	cmd.Flags().StringVar(&moveFrom, "move-from", "", "existing vault to move current items out of (optional)")
-	cmd.Flags().StringArrayVar(&explicitItems, "item", nil, "item name to include in .timeshare.yml (repeatable); must already exist in --vault")
+	cmd.Flags().StringArrayVarP(&explicitItems, "item", "i", nil, "item name to include in .timeshare.yml (repeatable); must already exist in --vault")
 	cmd.Flags().StringArrayVar(&moveItems, "move-item", nil, "move one item from an existing vault: <source-vault>/<item-name-or-id>, or just <source-vault> (no slash) for an interactive picker (repeatable)")
-	cmd.Flags().BoolVar(&force, "force", false, "overwrite an existing .timeshare.yml")
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "overwrite an existing .timeshare.yml")
+	cmd.Flags().BoolVarP(&nonInteractive, "non-interactive", "n", false, "never prompt; validate flags and fail fast on anything incomplete (for scripts/CI)")
 	return cmd
 }

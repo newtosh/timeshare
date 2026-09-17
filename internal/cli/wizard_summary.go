@@ -11,16 +11,14 @@ import (
 )
 
 const (
-	menuAddItems  = "add-items"  //nolint:unused // wired in by Task 8
-	menuChangeTTL = "change-ttl" //nolint:unused // wired in by Task 8
-	menuStartOver = "start-over" //nolint:unused // wired in by Task 8
+	menuAddItems  = "add-items"
+	menuChangeTTL = "change-ttl"
+	menuStartOver = "start-over"
 )
 
 // runExistingConfigMenu handles `timeshare init` (wizard mode) when
 // .timeshare.yml already exists: show a summary, then act on one targeted
 // choice. Never mutates the file until a choice is confirmed.
-//
-//nolint:unused // wired in by Task 8
 func runExistingConfigMenu(cwd, cfgPath string, cfg config.Config) error {
 	fmt.Printf("Existing config at %s:\n", cfgPath)
 	fmt.Printf("  vault: %s\n  mode:  %s\n  ttl:   %s\n  items: %d\n\n", cfg.Vault, cfg.Mode, cfg.TTL, len(cfg.Items))

@@ -33,3 +33,15 @@ func TestWriteTimeshareConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestInitCmdHasShortFlags(t *testing.T) {
+	cmd := newInitCmd()
+	for long, short := range map[string]string{
+		"vault": "v", "mode": "m", "ttl": "t", "item": "i", "force": "f", "non-interactive": "n",
+	} {
+		f := cmd.Flags().ShorthandLookup(short)
+		if f == nil || f.Name != long {
+			t.Errorf("expected -%s to be the shorthand for --%s, got %+v", short, long, f)
+		}
+	}
+}
