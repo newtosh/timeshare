@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/config"
 )
 
 func TestBiometricResolvesRealSecret(t *testing.T) {

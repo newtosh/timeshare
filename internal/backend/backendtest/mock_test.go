@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"timeshare/internal/backend"
-	"timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/backend"
+	"github.com/newtosh/timeshare/internal/config"
 )
 
 func TestMockResolvesConfiguredValue(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"timeshare/internal/daemon"
+	"github.com/newtosh/timeshare/internal/daemon"
 )
 
 // startFakeDaemon listens on a temp socket and answers exactly one request

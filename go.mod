@@ -1,4 +1,4 @@
-module timeshare
+module github.com/newtosh/timeshare
 
 go 1.27.1
 

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"timeshare/internal/config"
-	"timeshare/internal/projectid"
+	"github.com/newtosh/timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/projectid"
 
 	"github.com/spf13/cobra"
 )

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/config"
 )
 
 func TestWriteTimeshareConfig(t *testing.T) {

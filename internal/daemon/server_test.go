@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"timeshare/internal/backend/backendtest"
-	"timeshare/internal/cache"
-	"timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/backend/backendtest"
+	"github.com/newtosh/timeshare/internal/cache"
+	"github.com/newtosh/timeshare/internal/config"
 )
 
 func dialServer(t *testing.T, srv *Server) net.Conn {

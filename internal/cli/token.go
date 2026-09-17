@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"timeshare/internal/tokenstore"
+	"github.com/newtosh/timeshare/internal/tokenstore"
 
 	"github.com/spf13/cobra"
 )

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"timeshare/internal/client"
+	"github.com/newtosh/timeshare/internal/client"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"

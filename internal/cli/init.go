@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"timeshare/internal/config"
-	"timeshare/internal/onepassword"
+	"github.com/newtosh/timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/onepassword"
 
 	"github.com/spf13/cobra"
 )

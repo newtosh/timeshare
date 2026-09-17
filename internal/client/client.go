@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"timeshare/internal/daemon"
+	"github.com/newtosh/timeshare/internal/daemon"
 )
 
 // Client is the CLI's connection to timesharedd.

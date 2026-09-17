@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/config"
 )
 
 type Mock struct {

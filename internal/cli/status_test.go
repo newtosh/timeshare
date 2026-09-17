@@ -5,7 +5,7 @@ import (
 	"net"
 	"testing"
 
-	"timeshare/internal/client"
+	"github.com/newtosh/timeshare/internal/client"
 )
 
 func TestCheckDaemonReachableErrorsWhenUnreachable(t *testing.T) {
