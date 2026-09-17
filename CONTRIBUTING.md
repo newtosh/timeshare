@@ -32,6 +32,12 @@ mergeable (branch protection's `strict` status-check setting).
 - Tests exercise real behavior (real sockets, real files in `t.TempDir()`,
   a real in-memory keychain via `keyring.MockInit()`) rather than mocking
   the thing under test.
+- Every PR gets a complexity pass before merge, on top of correctness/
+  security review — flag unused flexibility, hand-rolled stdlib
+  equivalents, and single-implementation abstractions, and cut them
+  before the diff lands. There's no automated CI gate for this (it needs
+  a reviewer making a judgment call, not a lint rule), so it's a manual
+  step in the PR process, not a GitHub Actions job.
 
 ## Project layout
 
