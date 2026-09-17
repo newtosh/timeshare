@@ -1,4 +1,3 @@
-// internal/cli/wizard_render_test.go
 package cli
 
 import (
