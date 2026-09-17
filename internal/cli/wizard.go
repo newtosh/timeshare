@@ -120,33 +120,40 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	if !s.set["item"] && !s.set["move-from"] && !s.set["move-item"] {
 		fmt.Print(renderStepBlock(steps(), stepItems, "Items:\n\nMove items from an existing vault. At least one\nitem source is required — a config with an empty\nitems list will never load.") + "\n")
 
-		// A blank answer isn't offered: an empty items list is never a
-		// valid end state for this tool (see validateComplete), so the
-		// wizard must not be able to produce one. Loop until non-blank.
-		var sourceVault string
-		for sourceVault == "" {
-			if err := huh.NewInput().
-				Title("Existing vault to pick items from").
-				Value(&sourceVault).
-				Run(); err != nil {
-				return nil, err
+		// A blank vault name isn't offered, and neither is an empty pick:
+		// an empty items list is never a valid end state for this tool
+		// (see validateComplete), so the wizard must not be able to
+		// produce one. Loop until at least one item is picked.
+		var picked []onepassword.Item
+		for len(picked) == 0 {
+			var sourceVault string
+			for sourceVault == "" {
+				if err := huh.NewInput().
+					Title("Existing vault to pick items from").
+					Value(&sourceVault).
+					Run(); err != nil {
+					return nil, err
+				}
+				if sourceVault == "" {
+					fmt.Println("An item source is required — enter a vault to pick items from.")
+				}
 			}
-			if sourceVault == "" {
-				fmt.Println("An item source is required — enter a vault to pick items from.")
-			}
-		}
 
-		sourceItems, err := onepassword.ListItems(sourceVault)
-		if err != nil {
-			return nil, fmt.Errorf("listing items in %s: %w", sourceVault, err)
-		}
-		picked, err := pickItems(sourceVault, sourceItems)
-		if err != nil {
-			return nil, fmt.Errorf("picking items from %s: %w", sourceVault, err)
-		}
-		s.MoveItems = make([]string, len(picked))
-		for i, item := range picked {
-			s.MoveItems[i] = sourceVault + "/" + item.ID
+			sourceItems, err := onepassword.ListItems(sourceVault)
+			if err != nil {
+				return nil, fmt.Errorf("listing items in %s: %w", sourceVault, err)
+			}
+			picked, err = pickItems(sourceVault, sourceItems)
+			if err != nil {
+				return nil, fmt.Errorf("picking items from %s: %w", sourceVault, err)
+			}
+			if len(picked) == 0 {
+				fmt.Println("At least one item is required — pick at least one.")
+			}
+			s.MoveItems = make([]string, len(picked))
+			for i, item := range picked {
+				s.MoveItems[i] = sourceVault + "/" + item.ID
+			}
 		}
 		answered[stepItems] = true
 	}
