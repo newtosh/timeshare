@@ -27,6 +27,19 @@ only one is fully usable end to end right now:
 
 ## Install
 
+**Script** (installs both binaries, fixes `PATH` if needed, checks for the
+1Password CLI):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/newtosh/timeshare/main/install.sh | sh
+```
+
+This pipes a script straight into `sh` — for a tool that touches your
+secrets, read it first rather than trusting blindly:
+[install.sh](https://github.com/newtosh/timeshare/blob/main/install.sh).
+
+**Manual**, if you'd rather run the commands yourself:
+
 ```sh
 go install github.com/newtosh/timeshare/cmd/timeshare@latest github.com/newtosh/timeshare/cmd/timesharedd@latest
 ```
