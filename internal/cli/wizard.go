@@ -64,12 +64,19 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 		Force: seeded.Force, set: seeded.set,
 	}
 
+	// answered tracks which steps this wizard RUN has actively prompted
+	// and gotten a response for, independent of s's field values (which
+	// can be non-empty just from cobra flag defaults, e.g. Mode defaults
+	// to "biometric" even with zero flags passed). Every step's Done
+	// below uses the same rule: seeded-via-flag, or answered just now.
+	var answered [stepCount]bool
+
 	steps := func() []wizardStep {
 		return []wizardStep{
-			{Label: wizardStepLabels[stepVault], Value: s.Vault, Done: s.Vault != ""},
-			{Label: wizardStepLabels[stepMode], Value: s.Mode, Done: s.set["mode"] || s.Mode != ""},
-			{Label: wizardStepLabels[stepItems], Value: itemsSummary(s), Done: len(s.Items) > 0 || len(s.MoveItems) > 0 || s.MoveFrom != ""},
-			{Label: wizardStepLabels[stepTTL], Value: s.TTL, Done: s.set["ttl"]},
+			{Label: wizardStepLabels[stepVault], Value: s.Vault, Done: s.set["vault"] || answered[stepVault]},
+			{Label: wizardStepLabels[stepMode], Value: s.Mode, Done: s.set["mode"] || answered[stepMode]},
+			{Label: wizardStepLabels[stepItems], Value: itemsSummary(s), Done: s.set["item"] || s.set["move-from"] || s.set["move-item"] || answered[stepItems]},
+			{Label: wizardStepLabels[stepTTL], Value: s.TTL, Done: s.set["ttl"] || answered[stepTTL]},
 		}
 	}
 
@@ -87,6 +94,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 			return nil, err
 		}
 		s.Vault = val
+		answered[stepVault] = true
 	}
 
 	if !s.set["mode"] {
@@ -106,33 +114,41 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 			return nil, err
 		}
 		s.Mode = mode
+		answered[stepMode] = true
 	}
 
 	if !s.set["item"] && !s.set["move-from"] && !s.set["move-item"] {
-		fmt.Print(renderStepBlock(steps(), stepItems, "Items:\n\nMove items from an existing vault, or add them\nyourself later and edit .timeshare.yml by hand.") + "\n")
+		fmt.Print(renderStepBlock(steps(), stepItems, "Items:\n\nMove items from an existing vault. At least one\nitem source is required — a config with an empty\nitems list will never load.") + "\n")
 
+		// A blank answer isn't offered: an empty items list is never a
+		// valid end state for this tool (see validateComplete), so the
+		// wizard must not be able to produce one. Loop until non-blank.
 		var sourceVault string
-		if err := huh.NewInput().
-			Title("Existing vault to pick items from (leave blank to skip and add items later)").
-			Value(&sourceVault).
-			Run(); err != nil {
-			return nil, err
+		for sourceVault == "" {
+			if err := huh.NewInput().
+				Title("Existing vault to pick items from").
+				Value(&sourceVault).
+				Run(); err != nil {
+				return nil, err
+			}
+			if sourceVault == "" {
+				fmt.Println("An item source is required — enter a vault to pick items from.")
+			}
 		}
 
-		if sourceVault != "" {
-			sourceItems, err := onepassword.ListItems(sourceVault)
-			if err != nil {
-				return nil, fmt.Errorf("listing items in %s: %w", sourceVault, err)
-			}
-			picked, err := pickItems(sourceVault, sourceItems)
-			if err != nil {
-				return nil, fmt.Errorf("picking items from %s: %w", sourceVault, err)
-			}
-			s.MoveItems = make([]string, len(picked))
-			for i, item := range picked {
-				s.MoveItems[i] = sourceVault + "/" + item.ID
-			}
+		sourceItems, err := onepassword.ListItems(sourceVault)
+		if err != nil {
+			return nil, fmt.Errorf("listing items in %s: %w", sourceVault, err)
 		}
+		picked, err := pickItems(sourceVault, sourceItems)
+		if err != nil {
+			return nil, fmt.Errorf("picking items from %s: %w", sourceVault, err)
+		}
+		s.MoveItems = make([]string, len(picked))
+		for i, item := range picked {
+			s.MoveItems[i] = sourceVault + "/" + item.ID
+		}
+		answered[stepItems] = true
 	}
 
 	if !s.set["ttl"] {
@@ -149,6 +165,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 			return nil, err
 		}
 		s.TTL = val
+		answered[stepTTL] = true
 	}
 
 	return s, nil
