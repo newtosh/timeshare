@@ -5,6 +5,7 @@ package tokenstore
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -26,19 +27,24 @@ func Delete(vault string) error {
 // Lookup resolves vault's service-account token. It checks
 // TIMESHARE_SA_TOKEN_<SANITIZED_VAULT> first, then the OS keychain.
 func Lookup(vault string) (string, error) {
-	if v := os.Getenv(envVarName(vault)); v != "" {
+	envVar := envVarName(vault)
+	if v := os.Getenv(envVar); v != "" {
+		log.Printf("tokenstore: using %s override for vault %q (keychain not checked)", envVar, vault)
 		return v, nil
 	}
 
 	token, err := keyring.Get(keyringService, vault)
 	if err != nil {
-		return "", fmt.Errorf("no token for vault %q (set %s or run `timeshare token store %s`): %w", vault, envVarName(vault), vault, err)
+		return "", fmt.Errorf("no token for vault %q (set %s or run `timeshare token store %s`): %w", vault, envVar, vault, err)
 	}
 	return token, nil
 }
 
 // envVarName sanitizes vault into TIMESHARE_SA_TOKEN_<VAULT>: uppercased,
-// non-alphanumeric runs collapsed to a single underscore.
+// non-alphanumeric runs collapsed to a single underscore. Note this means
+// distinct vault names that differ only in punctuation/case (e.g.
+// "prod-1" and "Prod.1") sanitize to the same env var name and would
+// collide if both were used as override sources simultaneously.
 func envVarName(vault string) string {
 	var b strings.Builder
 	b.WriteString("TIMESHARE_SA_TOKEN_")

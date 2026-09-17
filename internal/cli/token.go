@@ -26,6 +26,7 @@ func newTokenStoreCmd() *cobra.Command {
 		Short: "Read a token from stdin and store it in the OS keychain for <vault>",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Fprintln(cmd.ErrOrStderr(), "Paste token, then press Enter:")
 			if err := runTokenStore(args[0], cmd.InOrStdin()); err != nil {
 				return err
 			}
