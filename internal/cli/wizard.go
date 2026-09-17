@@ -32,6 +32,19 @@ var wizardStepHelp = [stepCount]string{
 	stepTTL:   "How long a resolved secret stays cached before the next read re-checks 1Password. Longer means fewer prompts but a longer window before a rotated/revoked secret takes effect.",
 }
 
+// stepBlockRenderer redraws the wizard's step block in place: each call
+// clears the previous render (cursor up + clear-to-end) before printing the
+// next one, instead of letting every step's block scroll past on its own.
+type stepBlockRenderer struct{ lines int }
+
+func (r *stepBlockRenderer) render(block string) {
+	if r.lines > 0 {
+		fmt.Printf("\033[%dA\033[J", r.lines)
+	}
+	fmt.Print(block)
+	r.lines = strings.Count(block, "\n")
+}
+
 // isHelpRequest reports whether a raw prompt input was a bare "?" (possibly
 // surrounded by whitespace), the wizard's help-toggle signal.
 func isHelpRequest(input string) bool {
@@ -70,6 +83,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	// to "biometric" even with zero flags passed). Every step's Done
 	// below uses the same rule: seeded-via-flag, or answered just now.
 	var answered [stepCount]bool
+	render := &stepBlockRenderer{}
 
 	steps := func() []wizardStep {
 		return []wizardStep{
@@ -81,7 +95,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	}
 
 	if !s.set["vault"] {
-		fmt.Print(renderStepBlock(steps(), stepVault, "Vault name:") + "\n")
+		render.render(renderStepBlock(steps(), stepVault, "Vault name:") + "\n")
 		val, err := promptWithHelp(stepVault, func() (string, error) {
 			v := s.Vault
 			if v == "" {
@@ -98,7 +112,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	}
 
 	if !s.set["mode"] {
-		fmt.Print(renderStepBlock(steps(), stepMode, "Auth mode:") + "\n")
+		render.render(renderStepBlock(steps(), stepMode, "Auth mode:") + "\n")
 		mode := s.Mode
 		if mode == "" {
 			mode = string(config.ModeBiometric)
@@ -118,7 +132,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	}
 
 	if !s.set["item"] && !s.set["move-from"] && !s.set["move-item"] {
-		fmt.Print(renderStepBlock(steps(), stepItems, "Items:\n\nMove items from an existing vault. At least one\nitem source is required — a config with an empty\nitems list will never load.") + "\n")
+		render.render(renderStepBlock(steps(), stepItems, "Items:\n\nMove items from an existing vault. At least one\nitem source is required — a config with an empty\nitems list will never load.") + "\n")
 
 		// A blank vault name isn't offered, and neither is an empty pick:
 		// an empty items list is never a valid end state for this tool
@@ -159,7 +173,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	}
 
 	if !s.set["ttl"] {
-		fmt.Print(renderStepBlock(steps(), stepTTL, "Default cache TTL:") + "\n")
+		render.render(renderStepBlock(steps(), stepTTL, "Default cache TTL:") + "\n")
 		val, err := promptWithHelp(stepTTL, func() (string, error) {
 			ttl := s.TTL
 			if ttl == "" {
