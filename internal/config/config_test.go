@@ -85,3 +85,59 @@ func TestAllows(t *testing.T) {
 		t.Error("expected AWS_SECRET to be rejected")
 	}
 }
+
+func TestWriteLoadRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{
+		Vault: "project-x-secrets",
+		Mode:  ModeServiceAccount,
+		TTL:   4 * time.Hour,
+		Items: []string{"DATABASE_URL"},
+	}
+
+	path := filepath.Join(dir, ".timeshare.yml")
+	if err := Write(path, cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("written config failed to reload: %v", err)
+	}
+	if loaded.Vault != cfg.Vault || len(loaded.Items) != 1 {
+		t.Fatalf("got %+v", loaded)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestWriteLoadRoundTripYAMLSpecialContent proves vault/item names
+// containing YAML-significant content (not just plain whitespace, which
+// happens to survive a naive writer) round-trip correctly. Write uses the
+// real YAML marshaler for exactly this reason.
+func TestWriteLoadRoundTripYAMLSpecialContent(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{
+		Vault: "Team: Ops #prod",
+		Mode:  ModeBiometric,
+		TTL:   4 * time.Hour,
+		Items: []string{"DATABASE_URL: primary"},
+	}
+
+	path := filepath.Join(dir, ".timeshare.yml")
+	if err := Write(path, cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("written config failed to reload: %v", err)
+	}
+	if loaded.Vault != cfg.Vault {
+		t.Fatalf("vault round-trip: got %q, want %q", loaded.Vault, cfg.Vault)
+	}
+	if len(loaded.Items) != 1 || loaded.Items[0] != cfg.Items[0] {
+		t.Fatalf("items round-trip: got %v, want %v", loaded.Items, cfg.Items)
+	}
+}

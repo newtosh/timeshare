@@ -13,8 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func hourDuration() time.Duration { return time.Hour }
-
 // moveItem is a seam over onepassword.MoveItem so tests can exercise
 // moveInto's partial-failure/return behavior without shelling out to `op`.
 var moveItem = onepassword.MoveItem
@@ -54,17 +52,6 @@ func printSuggestions(sourceVault, ref string) {
 	for _, m := range matches {
 		fmt.Printf("  - %s (id: %s)\n", m.Title, m.ID)
 	}
-}
-
-func writeTimeshareConfig(path string, cfg config.Config) error {
-	content := fmt.Sprintf(
-		"vault: %s\nmode: %s\nttl: %s\nitems:\n",
-		cfg.Vault, cfg.Mode, cfg.TTL,
-	)
-	for _, item := range cfg.Items {
-		content += "  - " + item + "\n"
-	}
-	return os.WriteFile(path, []byte(content), 0o644) //nolint:gosec // .timeshare.yml is meant to be committed to git and world-readable; it never contains a credential
 }
 
 // runInit is the shared execution core for a fully-specified wizardState:
@@ -158,7 +145,7 @@ func runInit(cwd string, s *wizardState) error {
 		fmt.Printf("  <paste token> | timeshare token store %s\n", s.Vault)
 	}
 
-	if err := writeTimeshareConfig(cfgPath, cfg); err != nil {
+	if err := config.Write(cfgPath, cfg); err != nil {
 		return fmt.Errorf("writing .timeshare.yml: %w", err)
 	}
 
