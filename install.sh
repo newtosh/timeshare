@@ -14,9 +14,11 @@ fail()  { printf '\033[1;31mxx\033[0m %s\n' "$1" >&2; exit 1; }
 # with_spinner LABEL CMD...: runs CMD in the background with a spinner next
 # to LABEL while stdout is a real terminal; otherwise just prints LABEL and
 # runs CMD in the foreground (piped output, CI — no animation to corrupt).
-# Propagates CMD's exit status. Never use this for a command that might
-# prompt for input (e.g. sudo) — the spinner's carriage returns would
-# mangle the prompt.
+# CMD's own stdout/stderr is buffered to a temp file and flushed after the
+# spinner line finishes, so its output can't interleave with the spinner's
+# carriage-return redraws. Propagates CMD's exit status. Never use this for
+# a command that might prompt for input (e.g. sudo) — buffering would eat
+# the prompt along with everything else.
 with_spinner() {
 	label=$1
 	shift
@@ -26,7 +28,8 @@ with_spinner() {
 		return $?
 	fi
 
-	"$@" &
+	log=$(mktemp "${TMPDIR:-/tmp}/timeshare-install.XXXXXX")
+	"$@" >"$log" 2>&1 &
 	cmd_pid=$!
 	i=0
 	while kill -0 "$cmd_pid" 2>/dev/null; do
@@ -40,6 +43,8 @@ with_spinner() {
 	status=0
 	wait "$cmd_pid" || status=$?
 	printf '\r\033[1;34m==>\033[0m %s   \n' "$label"
+	[ -s "$log" ] && cat "$log"
+	rm -f "$log"
 	return "$status"
 }
 
