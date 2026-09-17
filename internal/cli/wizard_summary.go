@@ -55,8 +55,12 @@ func runExistingConfigMenu(cwd, cfgPath string, cfg config.Config) error {
 
 	switch choice {
 	case menuAddItems:
-		var sourceVault string
-		if err := huh.NewInput().Title("Existing vault to pick items from").Value(&sourceVault).Run(); err != nil {
+		vaults, err := onepassword.ListVaults()
+		if err != nil {
+			return fmt.Errorf("listing vaults: %w", err)
+		}
+		sourceVault, err := pickVault(vaults)
+		if err != nil {
 			return err
 		}
 		sourceItems, err := onepassword.ListItems(sourceVault)

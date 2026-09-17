@@ -46,3 +46,29 @@ func pickItems(sourceVault string, vaultItems []onepassword.Item) ([]onepassword
 	}
 	return selected, nil
 }
+
+// pickVault shows an interactive, type-to-filter select over vaults and
+// returns the chosen vault's ID — stable even if names aren't unique,
+// and op accepts an ID anywhere it accepts a name.
+func pickVault(vaults []onepassword.Vault) (string, error) {
+	if len(vaults) == 0 {
+		return "", fmt.Errorf("no vaults found")
+	}
+
+	options := make([]huh.Option[string], len(vaults))
+	for i, v := range vaults {
+		options[i] = huh.NewOption(fmt.Sprintf("%s (%s)", v.Name, v.ID), v.ID)
+	}
+
+	var selected string
+	field := huh.NewSelect[string]().
+		Title("Existing vault to pick items from").
+		Options(options...).
+		Filtering(true).
+		Value(&selected)
+
+	if err := huh.NewForm(huh.NewGroup(field)).Run(); err != nil {
+		return "", fmt.Errorf("vault picker: %w", err)
+	}
+	return selected, nil
+}
