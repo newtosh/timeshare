@@ -18,8 +18,8 @@ var (
 	wizardValueStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 	wizardActiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Bold(true)
 	wizardDimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	wizardLeftCol     = lipgloss.NewStyle().Width(40).Padding(0, 2, 0, 0)
-	wizardRightCol    = lipgloss.NewStyle().PaddingLeft(2).BorderStyle(lipgloss.NormalBorder()).BorderLeft(true).BorderForeground(lipgloss.Color("240"))
+	wizardLeftCol     = lipgloss.NewStyle().Width(40).Padding(0, 2, 1, 1).Background(lipgloss.Color("235"))
+	wizardRightCol    = lipgloss.NewStyle().Padding(0, 2, 1, 2).Background(lipgloss.Color("238")).BorderStyle(lipgloss.NormalBorder()).BorderLeft(true).BorderForeground(lipgloss.Color("240"))
 )
 
 // renderStepBlock renders one snapshot of the wizard: a left column listing
