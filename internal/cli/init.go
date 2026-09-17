@@ -86,9 +86,10 @@ func newInitCmd() *cobra.Command {
 			}
 
 			if mode == string(config.ModeServiceAccount) {
-				fmt.Println("Service-account token storage isn't implemented yet. Create one yourself:")
+				fmt.Println("Create a service account:")
 				fmt.Printf("  op service-account create %s --vault=%s:read_items\n", vaultName+"-timeshare", vaultID)
-				fmt.Println("Store the printed token in your OS keychain — timesharedd will look it up once token storage lands.")
+				fmt.Println("Then store the printed token in your OS keychain:")
+				fmt.Printf("  <paste token> | timeshare token store %s\n", vaultName)
 			}
 
 			if err := writeTimeshareConfig(cfgPath, cfg); err != nil {

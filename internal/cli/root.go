@@ -41,5 +41,6 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newStatusCmd())
 	root.AddCommand(newLockCmd())
 	root.AddCommand(newDoctorCmd())
+	root.AddCommand(newTokenCmd())
 	return root
 }

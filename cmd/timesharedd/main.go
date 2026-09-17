@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"os"
@@ -17,6 +16,7 @@ import (
 	"timeshare/internal/cache"
 	"timeshare/internal/config"
 	"timeshare/internal/daemon"
+	"timeshare/internal/tokenstore"
 )
 
 func main() {
@@ -65,9 +65,7 @@ func main() {
 			} {
 				return backend.NewOnePasswordServiceAccount(token)
 			},
-			TokenForVault: func(vault string) (string, error) {
-				return "", fmt.Errorf("service-account token storage not yet implemented")
-			},
+			TokenForVault: tokenstore.Lookup,
 		},
 		IdleTimeout: 30 * time.Minute,
 	}
