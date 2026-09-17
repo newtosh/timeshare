@@ -72,4 +72,21 @@ func TestCreateVaultMoveItemCleanup(t *testing.T) {
 	if _, err := GetItem(dstVault, "definitely-not-a-real-item-name"); err == nil {
 		t.Fatal("expected error for nonexistent item")
 	}
+
+	vaults, err := ListVaults()
+	if err != nil {
+		t.Fatalf("ListVaults: %v", err)
+	}
+	var sawSrc, sawDst bool
+	for _, v := range vaults {
+		if v.ID == srcID {
+			sawSrc = true
+		}
+		if v.ID == dstID {
+			sawDst = true
+		}
+	}
+	if !sawSrc || !sawDst {
+		t.Fatalf("expected both test vaults in ListVaults output, got %v", vaults)
+	}
 }

@@ -43,6 +43,34 @@ func DeleteVault(idOrName string) error {
 	return err
 }
 
+// Vault is a 1Password vault's identity: enough to reference it (ID) and
+// show it to a user (Name). Names aren't guaranteed unique across an
+// account, so callers should reference vaults by ID once one is chosen.
+type Vault struct {
+	ID   string
+	Name string
+}
+
+// ListVaults lists every vault visible to the signed-in account.
+func ListVaults() ([]Vault, error) {
+	out, err := runOp("vault", "list", "--format=json")
+	if err != nil {
+		return nil, err
+	}
+	var raw []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, fmt.Errorf("parsing op vault list output: %w", err)
+	}
+	vaults := make([]Vault, len(raw))
+	for i, v := range raw {
+		vaults[i] = Vault{ID: v.ID, Name: v.Name}
+	}
+	return vaults, nil
+}
+
 func CreateLoginItem(vault, title, username, password string) error {
 	_, err := runOp("item", "create",
 		"--category=login",

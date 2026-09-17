@@ -19,14 +19,14 @@ const (
 )
 
 var wizardStepLabels = [stepCount]string{
-	stepVault: "Vault name",
+	stepVault: "Repo vault name",
 	stepMode:  "Auth mode",
 	stepItems: "Items",
 	stepTTL:   "TTL",
 }
 
 var wizardStepHelp = [stepCount]string{
-	stepVault: "The name of a new, dedicated 1Password vault timeshare will create for this project. Pick something specific to this repo — it shouldn't be shared with unrelated projects.",
+	stepVault: "The name of a new, dedicated 1Password vault timeshare will create for this repo. Pick something specific to this repo — it shouldn't be shared with unrelated projects.",
 	stepMode:  "Biometric: shells out to `op read`, same Touch ID/Windows Hello prompt you already get, cached for the TTL. Service account: headless, token-based, no prompts at all, but requires a manual token-store step after init (see the printed instructions).",
 	stepItems: "Which 1Password items should this project's allow-list include. You can move items from an existing vault, or pick from a list interactively.",
 	stepTTL:   "How long a resolved secret stays cached before the next read re-checks 1Password. Longer means fewer prompts but a longer window before a rotated/revoked secret takes effect.",
@@ -39,9 +39,16 @@ type stepBlockRenderer struct{ lines int }
 
 func (r *stepBlockRenderer) render(block string) {
 	if r.lines > 0 {
-		fmt.Printf("\033[%dA\033[J", r.lines)
+		// Reset SGR (colors) before erasing: \033[J fills the erased region
+		// using whatever background color is currently active, so without
+		// an explicit reset first, our column backgrounds can leak forward
+		// into terminal state that huh's own widgets (filter text, prompts)
+		// render on top of next — making that text unreadable against a
+		// leftover background instead of the terminal's real default.
+		fmt.Printf("\033[0m\033[%dA\033[J", r.lines)
 	}
 	fmt.Print(block)
+	fmt.Print("\033[0m")
 	r.lines = strings.Count(block, "\n")
 }
 
@@ -95,13 +102,13 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	}
 
 	if !s.set["vault"] {
-		render.render(renderStepBlock(steps(), stepVault, "Vault name:") + "\n")
+		render.render(renderStepBlock(steps(), stepVault, "Repo vault name:") + "\n")
 		val, err := promptWithHelp(stepVault, func() (string, error) {
 			v := s.Vault
 			if v == "" {
 				v = defaultVaultName(cwd)
 			}
-			err := huh.NewInput().Title("Vault name").Value(&v).Run()
+			err := huh.NewInput().Title("Repo vault name").Value(&v).Run()
 			return v, err
 		})
 		if err != nil {
@@ -132,42 +139,37 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	}
 
 	if !s.set["item"] && !s.set["move-from"] && !s.set["move-item"] {
-		render.render(renderStepBlock(steps(), stepItems, "Existing vault to pick items from:\n\nMove items from an existing vault. At least one\nitem source is required — a config with an empty\nitems list will never load.") + "\n")
+		render.render(renderStepBlock(steps(), stepItems, "Existing vault to pick items from:\n\nMove items from an existing vault. At least one\nitem is required — a config with an empty\nitems list will never load.") + "\n")
 
-		// A blank vault name isn't offered, and neither is an empty pick:
-		// an empty items list is never a valid end state for this tool
+		vaults, err := onepassword.ListVaults()
+		if err != nil {
+			return nil, fmt.Errorf("listing vaults: %w", err)
+		}
+		sourceVault, err := pickVault(vaults)
+		if err != nil {
+			return nil, err
+		}
+
+		sourceItems, err := onepassword.ListItems(sourceVault)
+		if err != nil {
+			return nil, fmt.Errorf("listing items in %s: %w", sourceVault, err)
+		}
+
+		// An empty items list is never a valid end state for this tool
 		// (see validateComplete), so the wizard must not be able to
-		// produce one. Loop until at least one item is picked.
+		// produce one: re-open the picker against the SAME vault on an
+		// empty pick, rather than re-asking for the vault too. pickItems
+		// already reports "No items selected..." — no need to repeat it.
 		var picked []onepassword.Item
 		for len(picked) == 0 {
-			var sourceVault string
-			for sourceVault == "" {
-				if err := huh.NewInput().
-					Title("Existing vault to pick items from").
-					Value(&sourceVault).
-					Run(); err != nil {
-					return nil, err
-				}
-				if sourceVault == "" {
-					fmt.Println("An item source is required — enter a vault to pick items from.")
-				}
-			}
-
-			sourceItems, err := onepassword.ListItems(sourceVault)
-			if err != nil {
-				return nil, fmt.Errorf("listing items in %s: %w", sourceVault, err)
-			}
 			picked, err = pickItems(sourceVault, sourceItems)
 			if err != nil {
 				return nil, fmt.Errorf("picking items from %s: %w", sourceVault, err)
 			}
-			if len(picked) == 0 {
-				fmt.Println("At least one item is required — pick at least one.")
-			}
-			s.MoveItems = make([]string, len(picked))
-			for i, item := range picked {
-				s.MoveItems[i] = sourceVault + "/" + item.ID
-			}
+		}
+		s.MoveItems = make([]string, len(picked))
+		for i, item := range picked {
+			s.MoveItems[i] = sourceVault + "/" + item.ID
 		}
 		answered[stepItems] = true
 	}
