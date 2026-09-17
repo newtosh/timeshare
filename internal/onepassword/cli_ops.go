@@ -66,20 +66,47 @@ func MoveItem(itemName, fromVault, toVault string) error {
 	return err
 }
 
-func ListItems(vault string) ([]string, error) {
+// Item is a 1Password item's identity: enough to reference it (ID) and
+// show it to a user (Title). Titles aren't guaranteed unique within a
+// vault — 1Password's own docs recommend IDs for stable references.
+type Item struct {
+	ID    string
+	Title string
+}
+
+func ListItems(vault string) ([]Item, error) {
 	out, err := runOp("item", "list", "--vault="+vault, "--format=json")
 	if err != nil {
 		return nil, err
 	}
-	var items []struct {
+	var raw []struct {
+		ID    string `json:"id"`
 		Title string `json:"title"`
 	}
-	if err := json.Unmarshal(out, &items); err != nil {
+	if err := json.Unmarshal(out, &raw); err != nil {
 		return nil, fmt.Errorf("parsing op item list output: %w", err)
 	}
-	titles := make([]string, len(items))
-	for i, it := range items {
-		titles[i] = it.Title
+	items := make([]Item, len(raw))
+	for i, it := range raw {
+		items[i] = Item{ID: it.ID, Title: it.Title}
 	}
-	return titles, nil
+	return items, nil
+}
+
+// GetItem resolves ref (a title or an ID — op accepts either
+// interchangeably) against vault. Returns an error if ref doesn't match
+// exactly one item.
+func GetItem(vault, ref string) (Item, error) {
+	out, err := runOp("item", "get", ref, "--vault="+vault, "--format=json")
+	if err != nil {
+		return Item{}, err
+	}
+	var raw struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return Item{}, fmt.Errorf("parsing op item get output: %w", err)
+	}
+	return Item{ID: raw.ID, Title: raw.Title}, nil
 }

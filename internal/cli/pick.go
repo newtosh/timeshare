@@ -1,0 +1,48 @@
+package cli
+
+import (
+	"fmt"
+
+	"timeshare/internal/onepassword"
+
+	"github.com/charmbracelet/huh"
+)
+
+// pickItems shows an interactive, type-to-filter multi-select over
+// vaultItems (from sourceVault, used only for the prompt title) and
+// returns the items the user selected. Falls back to huh's own
+// accessible/non-TTY mode automatically if stdin/stdout aren't a real
+// terminal — nothing extra needed here for that case.
+func pickItems(sourceVault string, vaultItems []onepassword.Item) ([]onepassword.Item, error) {
+	if len(vaultItems) == 0 {
+		return nil, fmt.Errorf("vault %q has no items to pick from", sourceVault)
+	}
+
+	byID := make(map[string]onepassword.Item, len(vaultItems))
+	options := make([]huh.Option[string], len(vaultItems))
+	for i, it := range vaultItems {
+		byID[it.ID] = it
+		options[i] = huh.NewOption(fmt.Sprintf("%s (%s)", it.Title, it.ID), it.ID)
+	}
+
+	var selectedIDs []string
+	field := huh.NewMultiSelect[string]().
+		Title(fmt.Sprintf("Select items to move from %q", sourceVault)).
+		Options(options...).
+		Filtering(true).
+		Value(&selectedIDs)
+
+	if err := huh.NewForm(huh.NewGroup(field)).Run(); err != nil {
+		return nil, fmt.Errorf("item picker: %w", err)
+	}
+
+	if len(selectedIDs) == 0 {
+		fmt.Printf("No items selected from %q, skipping.\n", sourceVault)
+	}
+
+	selected := make([]onepassword.Item, len(selectedIDs))
+	for i, id := range selectedIDs {
+		selected[i] = byID[id]
+	}
+	return selected, nil
+}
