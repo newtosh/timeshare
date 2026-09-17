@@ -15,6 +15,27 @@ import (
 
 func hourDuration() time.Duration { return time.Hour }
 
+// moveItem is a seam over onepassword.MoveItem so tests can exercise
+// moveInto's partial-failure/return behavior without shelling out to `op`.
+var moveItem = onepassword.MoveItem
+
+// moveInto moves each of picked from sourceVault into destVault, printing
+// progress as it goes. It returns alreadyMoved plus every item that moved
+// successfully in THIS call, alongside any error — including on error, so a
+// caller can persist a partial result instead of losing track of what
+// really moved in 1Password before the failure.
+func moveInto(destVault, sourceVault string, picked []onepassword.Item, alreadyMoved []string) ([]string, error) {
+	items := append([]string{}, alreadyMoved...)
+	for _, item := range picked {
+		fmt.Printf("Moving %q into %q...\n", item.Title, destVault)
+		if err := moveItem(item.ID, sourceVault, destVault); err != nil {
+			return items, fmt.Errorf("moving item %q failed (already moved: %v): %w", item.Title, items, err)
+		}
+		items = append(items, item.Title)
+	}
+	return items, nil
+}
+
 // printSuggestions prints up to 3 "did you mean" candidates for ref within
 // sourceVault. Item titles aren't guaranteed unique, so suggestions
 // include the ID for a stable follow-up reference. Silently does nothing
@@ -76,12 +97,9 @@ func runInit(cwd string, s *wizardState) error {
 		if err != nil {
 			return fmt.Errorf("listing items in %s: %w", s.MoveFrom, err)
 		}
-		for _, it := range existing {
-			fmt.Printf("Moving %q into %q...\n", it.Title, s.Vault)
-			if err := onepassword.MoveItem(it.ID, s.MoveFrom, s.Vault); err != nil {
-				return fmt.Errorf("moving item %q failed (already moved: %v): %w", it.Title, items, err)
-			}
-			items = append(items, it.Title)
+		items, err = moveInto(s.Vault, s.MoveFrom, existing, items)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -119,12 +137,10 @@ func runInit(cwd string, s *wizardState) error {
 			toMove = picked
 		}
 
-		for _, item := range toMove {
-			fmt.Printf("Moving %q into %q...\n", item.Title, s.Vault)
-			if err := onepassword.MoveItem(item.ID, sourceVault, s.Vault); err != nil {
-				return fmt.Errorf("moving item %q failed (already moved: %v): %w", item.Title, items, err)
-			}
-			items = append(items, item.Title)
+		var moveErr error
+		items, moveErr = moveInto(s.Vault, sourceVault, toMove, items)
+		if moveErr != nil {
+			return moveErr
 		}
 	}
 
