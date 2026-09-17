@@ -27,18 +27,26 @@ var (
 // for the current step, dimmed for the rest) beside a right column holding
 // activeContent verbatim (the active step's prompt/help text — the caller
 // owns what that string contains, this function only lays it out).
+//
+// The done/active markers are plain ASCII ("+", "->"), not Unicode glyphs
+// like ✓/▸: those are East Asian Width "Ambiguous" characters, so some
+// terminal/font combinations render them 2 cells wide while lipgloss's
+// column-width math assumes 1 — the mismatch shows up as an unevenly
+// padded background. ASCII is unambiguously 1 cell everywhere, and a
+// ligature-aware font (Fira Code, JetBrains Mono, Cascadia Code, ...)
+// still renders "->" as a clean arrow.
 func renderStepBlock(steps []wizardStep, activeIdx int, activeContent string) string {
 	var left strings.Builder
 	for i, st := range steps {
 		switch {
 		case st.Done:
-			left.WriteString(wizardCheckStyle.Render("✓") + " " + st.Label)
+			left.WriteString(wizardCheckStyle.Render("+") + " " + st.Label)
 			if st.Value != "" {
 				left.WriteString("  " + wizardValueStyle.Render(st.Value))
 			}
 			left.WriteString("\n")
 		case i == activeIdx:
-			left.WriteString(wizardActiveStyle.Render("▸ "+st.Label) + "\n")
+			left.WriteString(wizardActiveStyle.Render("-> "+st.Label) + "\n")
 		default:
 			left.WriteString(wizardDimStyle.Render("  "+st.Label) + "\n")
 		}
