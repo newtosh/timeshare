@@ -72,7 +72,7 @@ func runExistingConfigMenu(cwd, cfgPath string, cfg config.Config) error {
 		// Persist even on a partial failure: some items may really have
 		// moved in 1Password before the error, and without this write
 		// .timeshare.yml would silently drift out of sync with reality.
-		if writeErr := writeTimeshareConfig(cfgPath, cfg); writeErr != nil {
+		if writeErr := config.Write(cfgPath, cfg); writeErr != nil {
 			if moveErr != nil {
 				return fmt.Errorf("%w (also failed writing partial config: %w)", moveErr, writeErr)
 			}
@@ -94,7 +94,7 @@ func runExistingConfigMenu(cwd, cfgPath string, cfg config.Config) error {
 		// onepassword.CreateVault, which would be wrong here — this is a
 		// pure config edit, no 1Password mutation at all.
 		cfg.TTL = parsed
-		return writeTimeshareConfig(cfgPath, cfg)
+		return config.Write(cfgPath, cfg)
 
 	case menuStartOver:
 		var confirmed bool

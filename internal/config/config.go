@@ -62,6 +62,25 @@ func Load(path string) (Config, error) {
 	return Config{Vault: raw.Vault, Mode: mode, TTL: ttl, Items: raw.Items}, nil
 }
 
+// Write marshals cfg to path as YAML, symmetric with Load. Uses the real
+// YAML marshaler (not hand-built string concatenation) so vault/item names
+// containing YAML-significant characters — a colon, a leading "-" or "#",
+// literal whitespace, anything — round-trip correctly.
+func Write(path string, cfg Config) error {
+	raw := rawConfig{
+		Vault: cfg.Vault,
+		Mode:  string(cfg.Mode),
+		TTL:   cfg.TTL.String(),
+		Items: cfg.Items,
+	}
+	data, err := yaml.Marshal(raw)
+	if err != nil {
+		return fmt.Errorf("marshaling config: %w", err)
+	}
+	//nolint:gosec // .timeshare.yml is meant to be committed to git and world-readable; it never contains a credential
+	return os.WriteFile(path, data, 0o644)
+}
+
 // Allows reports whether secretName is in this config's item allow-list.
 func (c Config) Allows(secretName string) bool {
 	for _, item := range c.Items {
