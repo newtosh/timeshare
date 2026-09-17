@@ -35,6 +35,7 @@ GO_VERSION=$(go version | sed -n 's/^go version go\([0-9.]*\).*/\1/p')
 if [ -z "$GO_VERSION" ]; then
 	warn "couldn't parse 'go version' output — continuing anyway, go install will fail loudly if the version is too old."
 elif ! version_ge "$GO_VERSION" "$MIN_GO_VERSION"; then
+	still_stale="go $GO_VERSION found, but timeshare requires go >= $MIN_GO_VERSION. Update from https://go.dev/dl/ and re-run."
 	upgrade_cmd=$(upgrade_cmd_for_go)
 	if [ -n "$upgrade_cmd" ] && [ -r /dev/tty ]; then
 		warn "go $GO_VERSION found, but timeshare requires go >= $MIN_GO_VERSION."
@@ -44,15 +45,11 @@ elif ! version_ge "$GO_VERSION" "$MIN_GO_VERSION"; then
 		[Yy]*)
 			eval "$upgrade_cmd" </dev/tty
 			GO_VERSION=$(go version | sed -n 's/^go version go\([0-9.]*\).*/\1/p')
-			version_ge "$GO_VERSION" "$MIN_GO_VERSION" || fail "still on go $GO_VERSION after upgrade attempt. Update manually from https://go.dev/dl/ and re-run."
-			;;
-		*)
-			fail "go $GO_VERSION found, but timeshare requires go >= $MIN_GO_VERSION. Update from https://go.dev/dl/ and re-run."
+			version_ge "$GO_VERSION" "$MIN_GO_VERSION" && still_stale=""
 			;;
 		esac
-	else
-		fail "go $GO_VERSION found, but timeshare requires go >= $MIN_GO_VERSION. Update from https://go.dev/dl/ and re-run."
 	fi
+	[ -n "$still_stale" ] && fail "$still_stale"
 fi
 
 info "Installing timeshare and timesharedd..."
