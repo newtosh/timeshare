@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/newtosh/timeshare/internal/config"
@@ -9,6 +10,22 @@ import (
 
 	"github.com/charmbracelet/huh"
 )
+
+var (
+	ttlTrimHourZero = regexp.MustCompile(`h0m0s$`)
+	ttlTrimMinZero  = regexp.MustCompile(`m0s$`)
+)
+
+// formatTTL renders a duration the way a user is likely to have typed it
+// (e.g. "4h" rather than Go's default Duration.String() of "4h0m0s"), by
+// trimming trailing zero-valued minute/second components.
+func formatTTL(d time.Duration) string {
+	s := d.String()
+	if trimmed := ttlTrimHourZero.ReplaceAllString(s, "h"); trimmed != s {
+		return trimmed
+	}
+	return ttlTrimMinZero.ReplaceAllString(s, "m")
+}
 
 const (
 	menuAddItems  = "add-items"
@@ -21,7 +38,7 @@ const (
 // choice. Never mutates the file until a choice is confirmed.
 func runExistingConfigMenu(cwd, cfgPath string, cfg config.Config) error {
 	fmt.Printf("Existing config at %s:\n", cfgPath)
-	fmt.Printf("  vault: %s\n  mode:  %s\n  ttl:   %s\n  items: %d\n\n", cfg.Vault, cfg.Mode, cfg.TTL, len(cfg.Items))
+	fmt.Printf("  vault: %s\n  mode:  %s\n  ttl:   %s\n  items: %d\n\n", cfg.Vault, cfg.Mode, formatTTL(cfg.TTL), len(cfg.Items))
 
 	var choice string
 	if err := huh.NewSelect[string]().
@@ -50,19 +67,21 @@ func runExistingConfigMenu(cwd, cfgPath string, cfg config.Config) error {
 		if err != nil {
 			return fmt.Errorf("picking items from %s: %w", sourceVault, err)
 		}
-		items := append([]string{}, cfg.Items...)
-		for _, item := range picked {
-			fmt.Printf("Moving %q into %q...\n", item.Title, cfg.Vault)
-			if err := onepassword.MoveItem(item.ID, sourceVault, cfg.Vault); err != nil {
-				return fmt.Errorf("moving item %q failed (already moved: %v): %w", item.Title, items, err)
-			}
-			items = append(items, item.Title)
-		}
+		items, moveErr := moveInto(cfg.Vault, sourceVault, picked, cfg.Items)
 		cfg.Items = items
-		return writeTimeshareConfig(cfgPath, cfg)
+		// Persist even on a partial failure: some items may really have
+		// moved in 1Password before the error, and without this write
+		// .timeshare.yml would silently drift out of sync with reality.
+		if writeErr := writeTimeshareConfig(cfgPath, cfg); writeErr != nil {
+			if moveErr != nil {
+				return fmt.Errorf("%w (also failed writing partial config: %w)", moveErr, writeErr)
+			}
+			return writeErr
+		}
+		return moveErr
 
 	case menuChangeTTL:
-		ttl := cfg.TTL.String()
+		ttl := formatTTL(cfg.TTL)
 		if err := huh.NewInput().Title("New default cache TTL").Value(&ttl).Run(); err != nil {
 			return err
 		}
@@ -78,7 +97,22 @@ func runExistingConfigMenu(cwd, cfgPath string, cfg config.Config) error {
 		return writeTimeshareConfig(cfgPath, cfg)
 
 	case menuStartOver:
-		seeded := &wizardState{set: make(map[string]bool)}
+		var confirmed bool
+		if err := huh.NewConfirm().
+			Title(fmt.Sprintf("Start over will overwrite %s. Continue?", cfgPath)).
+			Value(&confirmed).
+			Run(); err != nil {
+			return err
+		}
+		if !confirmed {
+			return nil
+		}
+
+		// Seed with the CURRENT vault name rather than a blank state, so
+		// the vault-name step pre-fills it instead of re-deriving one
+		// from the repo dir name — a name collision (op allows duplicate
+		// vault names) becomes visible/intentional rather than silent.
+		seeded := &wizardState{Vault: cfg.Vault, set: make(map[string]bool)}
 		completed, err := runWizard(cwd, seeded)
 		if err != nil {
 			return err
