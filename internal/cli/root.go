@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/spf13/cobra"
 	"timeshare/internal/config"
 	"timeshare/internal/projectid"
+
+	"github.com/spf13/cobra"
 )
 
 // LoadProjectContext finds the git root above cwd, loads its .timeshare.yml,

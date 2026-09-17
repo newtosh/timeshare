@@ -10,7 +10,7 @@ import (
 func writeFile(t *testing.T, dir, contents string) string {
 	t.Helper()
 	path := filepath.Join(dir, ".timeshare.yml")
-	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return path

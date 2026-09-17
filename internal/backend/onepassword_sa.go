@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	onepassword "github.com/1password/onepassword-sdk-go"
 	"timeshare/internal/config"
+
+	onepassword "github.com/1password/onepassword-sdk-go"
 )
 
 // defaultServiceAccountTTL is used when the request did not carry an
@@ -29,13 +30,13 @@ func (b *OnePasswordServiceAccount) Resolve(ctx context.Context, cfg config.Conf
 		onepassword.WithIntegrationInfo("timeshare", "0.1.0"),
 	)
 	if err != nil {
-		return "", 0, fmt.Errorf("%w: %v", ErrAuthFailed, err)
+		return "", 0, fmt.Errorf("%w: %w", ErrAuthFailed, err)
 	}
 
 	reference := fmt.Sprintf("op://%s/%s/password", cfg.Vault, secretName)
 	value, err := client.Secrets().Resolve(ctx, reference)
 	if err != nil {
-		return "", 0, fmt.Errorf("%w: %v", ErrItemNotFound, err)
+		return "", 0, fmt.Errorf("%w: %w", ErrItemNotFound, err)
 	}
 
 	return value, defaultServiceAccountTTL, nil

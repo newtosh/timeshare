@@ -39,7 +39,7 @@ func (c *Client) Read(ctx context.Context, req daemon.Request) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("connecting to timesharedd: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if err := daemon.WriteMessage(conn, req); err != nil {
 		return "", fmt.Errorf("sending request: %w", err)
@@ -92,7 +92,7 @@ func (c *Client) spawnDaemon() error {
 	if err := os.MkdirAll(filepath.Dir(c.SocketPath), 0o700); err != nil {
 		return err
 	}
-	cmd := exec.Command(c.DaemonBinary, "--socket", c.SocketPath)
+	cmd := exec.Command(c.DaemonBinary, "--socket", c.SocketPath) //nolint:gosec // DaemonBinary is admin-configured (defaults to the daemon installed alongside this binary), not attacker-controlled input
 	// Detach: new session, no controlling terminal, so the daemon outlives
 	// this short-lived CLI process (ssh-agent-style, spec: Key decisions).
 	cmd.SysProcAttr = detachedSysProcAttr()

@@ -44,9 +44,9 @@ func main() {
 		log.Print("timesharedd: another daemon already holds the lock for this socket, exiting")
 		return
 	}
-	defer lockFile.Close()
+	defer func() { _ = lockFile.Close() }()
 
-	os.Remove(*sockPath) // clear a stale socket from a previous crashed run
+	_ = os.Remove(*sockPath) // clear a stale socket from a previous crashed run; ok if it never existed
 
 	ln, err := net.Listen("unix", *sockPath)
 	if err != nil {

@@ -25,7 +25,7 @@ func NewOnePasswordBiometric() *OnePasswordBiometric {
 func (b *OnePasswordBiometric) Resolve(ctx context.Context, cfg config.Config, secretName string) (string, time.Duration, error) {
 	reference := fmt.Sprintf("op://%s/%s/password", cfg.Vault, secretName)
 
-	cmd := exec.CommandContext(ctx, "op", "read", reference)
+	cmd := exec.CommandContext(ctx, "op", "read", reference) //nolint:gosec // fixed binary name "op"; this IS the app's job (shell out to the 1Password CLI)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

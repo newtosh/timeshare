@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"timeshare/internal/client"
 	"timeshare/internal/daemon"
+
+	"github.com/spf13/cobra"
 )
 
 func newLockCmd() *cobra.Command {

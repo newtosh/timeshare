@@ -5,9 +5,10 @@ import (
 	"os"
 	"os/exec"
 
+	"timeshare/internal/client"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
-	"timeshare/internal/client"
 )
 
 var (
@@ -31,7 +32,7 @@ func newDoctorCmd() *cobra.Command {
 				c := &client.Client{SocketPath: client.DefaultSocketPath()}
 				conn, err := c.PingSocket(cmd.Context())
 				if err == nil {
-					conn.Close()
+					_ = conn.Close()
 				}
 				return err
 			}) {

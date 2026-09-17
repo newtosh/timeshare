@@ -80,7 +80,7 @@ func (s *Server) idleTimerC(t *time.Timer) <-chan time.Time {
 // the connection. The wire protocol is one request per connection, matching
 // how the CLI client operates (short-lived process per invocation).
 func (s *Server) HandleConn(conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if err := s.VerifyPeer(conn); err != nil {
 		_ = WriteMessage(conn, Response{Error: "peer verification failed: " + err.Error()})

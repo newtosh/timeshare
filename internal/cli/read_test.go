@@ -8,7 +8,7 @@ import (
 
 func TestLoadProjectContext(t *testing.T) {
 	tmp := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o750); err != nil {
 		t.Fatal(err)
 	}
 	yml := `
@@ -17,7 +17,7 @@ mode: biometric
 ttl: 1h
 items: [X]
 `
-	if err := os.WriteFile(filepath.Join(tmp, ".timeshare.yml"), []byte(yml), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, ".timeshare.yml"), []byte(yml), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -35,7 +35,7 @@ items: [X]
 
 func TestLoadProjectContextNoConfig(t *testing.T) {
 	tmp := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o750); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := LoadProjectContext(tmp); err == nil {

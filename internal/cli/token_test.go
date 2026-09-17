@@ -4,8 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zalando/go-keyring"
 	"timeshare/internal/tokenstore"
+
+	"github.com/zalando/go-keyring"
 )
 
 func TestRunTokenStoreReadsStdinAndStores(t *testing.T) {
