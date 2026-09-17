@@ -28,8 +28,7 @@ only one is fully usable end to end right now:
 ## Install
 
 ```sh
-go install github.com/newtosh/timeshare/cmd/timeshare@latest
-go install github.com/newtosh/timeshare/cmd/timesharedd@latest
+go install github.com/newtosh/timeshare/cmd/timeshare@latest github.com/newtosh/timeshare/cmd/timesharedd@latest
 ```
 
 Both land in `$(go env GOPATH)/bin` — make sure that's on your `PATH`.
