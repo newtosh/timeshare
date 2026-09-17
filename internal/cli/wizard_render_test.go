@@ -15,8 +15,8 @@ func TestRenderStepBlockShowsDoneStepsWithValue(t *testing.T) {
 	if !strings.Contains(out, "Vault name") || !strings.Contains(out, "project-x-secrets") {
 		t.Fatalf("expected completed step label and value in output, got:\n%s", out)
 	}
-	if !strings.Contains(out, "✓") {
-		t.Fatalf("expected a checkmark for the completed step, got:\n%s", out)
+	if !strings.Contains(out, "+") {
+		t.Fatalf("expected a done marker for the completed step, got:\n%s", out)
 	}
 }
 
@@ -37,7 +37,7 @@ func TestRenderStepBlockMarksActiveStepDistinctly(t *testing.T) {
 	}
 	out := renderStepBlock(steps, 1, "Items:")
 
-	if !strings.Contains(out, "▸") {
-		t.Fatalf("expected an active-step marker (▸), got:\n%s", out)
+	if !strings.Contains(out, "->") {
+		t.Fatalf("expected an active-step marker (->), got:\n%s", out)
 	}
 }

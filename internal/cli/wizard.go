@@ -132,7 +132,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	}
 
 	if !s.set["item"] && !s.set["move-from"] && !s.set["move-item"] {
-		render.render(renderStepBlock(steps(), stepItems, "Items:\n\nMove items from an existing vault. At least one\nitem source is required — a config with an empty\nitems list will never load.") + "\n")
+		render.render(renderStepBlock(steps(), stepItems, "Existing vault to pick items from:\n\nMove items from an existing vault. At least one\nitem source is required — a config with an empty\nitems list will never load.") + "\n")
 
 		// A blank vault name isn't offered, and neither is an empty pick:
 		// an empty items list is never a valid end state for this tool
