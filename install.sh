@@ -7,6 +7,7 @@ MODULE="github.com/newtosh/timeshare"
 MIN_GO_VERSION="1.27.1"
 
 info()  { printf '\033[1;34m==>\033[0m %s\n' "$1"; }
+hint()  { printf '\033[1;36m->\033[0m %s\n' "$1"; }
 warn()  { printf '\033[1;33m!!\033[0m %s\n' "$1"; }
 fail()  { printf '\033[1;31mxx\033[0m %s\n' "$1" >&2; exit 1; }
 
@@ -116,11 +117,11 @@ case ":$PATH:" in
 		else
 			printf '\n# added by timeshare install.sh\n%s\n' "$export_line" >>"$rc_file"
 			info "Added $GOBIN to PATH in $rc_file."
-			warn "Run 'source $rc_file' or open a new terminal before using timeshare."
+			hint "Run 'source $rc_file' or open a new terminal before using timeshare."
 		fi
 	else
-		warn "Couldn't detect your shell config file. Add this to your shell's rc file manually:"
-		printf '  export PATH="%s:$PATH"\n' "$GOBIN"
+		warn "Couldn't detect your shell config file."
+		hint "Add this to your shell's rc file manually: export PATH=\"$GOBIN:\$PATH\""
 	fi
 	;;
 esac
@@ -129,12 +130,14 @@ if command -v op >/dev/null 2>&1; then
 	if op whoami >/dev/null 2>&1; then
 		info "1Password CLI (op) found and signed in."
 	else
-		warn "1Password CLI (op) found but not signed in. Run: op signin"
+		warn "1Password CLI (op) found but not signed in."
+		hint "Run: op signin"
 	fi
 else
-	warn "1Password CLI (op) not found on PATH. Install it: https://developer.1password.com/docs/cli/get-started/"
+	warn "1Password CLI (op) not found on PATH."
+	hint "Install it: https://developer.1password.com/docs/cli/get-started/"
 fi
 
 info "Done. Get started in a git repo:"
-printf '\n  timeshare init --vault=<name> --mode=biometric --move-item=<existing-vault>\n\n'
+hint "timeshare init --vault=<name> --mode=biometric --move-item=<existing-vault>"
 info "See https://github.com/newtosh/timeshare#readme for the full walkthrough."
