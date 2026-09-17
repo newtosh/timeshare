@@ -21,7 +21,7 @@ const (
 var wizardStepLabels = [stepCount]string{
 	stepVault: "Repo vault name",
 	stepMode:  "Auth mode",
-	stepItems: "Items",
+	stepItems: "Items to move",
 	stepTTL:   "TTL",
 }
 
