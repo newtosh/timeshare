@@ -26,8 +26,8 @@ func TestNewWizardStateNoFlagsSet(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := newWizardState(cmd, "", "biometric", "4h", "", nil, nil, false)
-	if s.anyFlagsSet() {
-		t.Fatal("expected anyFlagsSet false when no flags were passed")
+	if len(s.set) != 0 {
+		t.Fatalf("expected no flags recorded in set map, got %v", s.set)
 	}
 }
 
@@ -37,9 +37,6 @@ func TestNewWizardStateSomeFlagsSet(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := newWizardState(cmd, "project-x", "biometric", "4h", "", nil, nil, false)
-	if !s.anyFlagsSet() {
-		t.Fatal("expected anyFlagsSet true when --vault was passed")
-	}
 	if !s.set["vault"] {
 		t.Fatal("expected set[\"vault\"] true")
 	}
@@ -54,9 +51,6 @@ func TestNewWizardStateItemFlagsCountAsSet(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := newWizardState(cmd, "", "biometric", "4h", "", nil, []string{"legacy-vault/DATABASE_URL"}, false)
-	if !s.anyFlagsSet() {
-		t.Fatal("expected anyFlagsSet true when --move-item was passed")
-	}
 	if !s.set["move-item"] {
 		t.Fatal("expected set[\"move-item\"] true")
 	}

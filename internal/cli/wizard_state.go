@@ -50,16 +50,6 @@ func newWizardState(cmd *cobra.Command, vault, mode, ttl, moveFrom string, items
 	return s
 }
 
-// anyFlagsSet reports whether any wizard-input flag was explicitly passed.
-func (s *wizardState) anyFlagsSet() bool {
-	for _, name := range wizardFlagNames {
-		if s.set[name] {
-			return true
-		}
-	}
-	return false
-}
-
 // validateComplete checks the same completeness rules the original
 // flag-only init enforced: required for the --non-interactive path.
 func (s *wizardState) validateComplete() error {
