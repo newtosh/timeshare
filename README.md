@@ -28,18 +28,19 @@ only one is fully usable end to end right now:
 ## Install
 
 ```sh
-git clone https://github.com/newtosh/timeshare
-cd timeshare
-make build
-# binaries land in ./bin/timeshare and ./bin/timesharedd
+go install github.com/newtosh/timeshare/cmd/timeshare@latest
+go install github.com/newtosh/timeshare/cmd/timesharedd@latest
 ```
 
-Put both on your `PATH`, or run `make build` and reference `./bin/timeshare`
-directly. `timesharedd` never needs to be started by hand — `timeshare`
-auto-spawns it on first use, the way `ssh-agent` works.
+Both land in `$(go env GOPATH)/bin` — make sure that's on your `PATH`.
+`timesharedd` never needs to be started by hand — `timeshare` auto-spawns
+it on first use, the way `ssh-agent` works.
 
 You'll also need the [1Password CLI](https://developer.1password.com/docs/cli/)
 (`op`) installed and signed in.
+
+Building from a local clone instead (e.g. to test an unmerged change) is a
+contributor workflow — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Quickstart (biometric mode)
 
