@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/huh"
 
 	"github.com/newtosh/timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/onepassword"
 )
 
 // Step indices are unused by anything reachable yet: runWizard (below) is
@@ -118,7 +119,32 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 		s.Mode = mode
 	}
 
-	// Items step: Task 6.
+	if !s.set["item"] && !s.set["move-from"] && !s.set["move-item"] {
+		fmt.Print(renderStepBlock(steps(), stepItems, "Items:\n\nMove items from an existing vault, or add them\nyourself later and edit .timeshare.yml by hand.") + "\n")
+
+		var sourceVault string
+		if err := huh.NewInput().
+			Title("Existing vault to pick items from (leave blank to skip and add items later)").
+			Value(&sourceVault).
+			Run(); err != nil {
+			return nil, err
+		}
+
+		if sourceVault != "" {
+			sourceItems, err := onepassword.ListItems(sourceVault)
+			if err != nil {
+				return nil, fmt.Errorf("listing items in %s: %w", sourceVault, err)
+			}
+			picked, err := pickItems(sourceVault, sourceItems)
+			if err != nil {
+				return nil, fmt.Errorf("picking items from %s: %w", sourceVault, err)
+			}
+			s.MoveItems = make([]string, len(picked))
+			for i, item := range picked {
+				s.MoveItems[i] = sourceVault + "/" + item.ID
+			}
+		}
+	}
 
 	if !s.set["ttl"] {
 		fmt.Print(renderStepBlock(steps(), stepTTL, "Default cache TTL:") + "\n")
