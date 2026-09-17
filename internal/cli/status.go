@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -26,20 +27,26 @@ func newStatusCmd() *cobra.Command {
 				return err
 			}
 
-			// status is a diagnostic probe: it must never spawn the daemon
-			// it's supposed to be reporting on, so it dials the raw socket
-			// (PingSocket) instead of going through client.Read's
-			// spawn-on-failure path.
 			c := &client.Client{SocketPath: client.DefaultSocketPath()}
-			conn, err := c.PingSocket(cmd.Context())
-			if err != nil {
+			if err := checkDaemonReachable(cmd.Context(), c); err != nil {
 				fmt.Println("daemon not running")
-				return nil
+				return err
 			}
-			_ = conn.Close()
 
 			fmt.Println(okStyle.Render("✓") + fmt.Sprintf(" daemon reachable for vault %q (%d items configured)", cfg.Vault, len(cfg.Items)))
 			return nil
 		},
 	}
+}
+
+// checkDaemonReachable is a diagnostic probe: it must never spawn the
+// daemon it's reporting on, so it dials the raw socket (PingSocket)
+// instead of going through client.Read's spawn-on-failure path.
+func checkDaemonReachable(ctx context.Context, c *client.Client) error {
+	conn, err := c.PingSocket(ctx)
+	if err != nil {
+		return fmt.Errorf("daemon unreachable at %s: %w", c.SocketPath, err)
+	}
+	_ = conn.Close()
+	return nil
 }
