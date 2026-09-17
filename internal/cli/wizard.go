@@ -10,10 +10,10 @@ import (
 )
 
 // Step indices are unused by anything reachable yet: runWizard (below) is
-// only wired into `timeshare init` by Task 7, and its items step is filled
+// only wired into `timeshare init` by Task 8, and its items step is filled
 // in by Task 6.
 //
-//nolint:unused // wired in by Task 6/7
+//nolint:unused // wired in by Task 6/8
 const (
 	stepVault = iota
 	stepMode
@@ -22,7 +22,7 @@ const (
 	stepCount
 )
 
-//nolint:unused // wired in by Task 6/7
+//nolint:unused // wired in by Task 6/8
 var wizardStepLabels = [stepCount]string{
 	stepVault: "Vault name",
 	stepMode:  "Auth mode",
@@ -30,7 +30,7 @@ var wizardStepLabels = [stepCount]string{
 	stepTTL:   "TTL",
 }
 
-//nolint:unused // wired in by Task 6/7
+//nolint:unused // wired in by Task 6/8
 var wizardStepHelp = [stepCount]string{
 	stepVault: "The name of a new, dedicated 1Password vault timeshare will create for this project. Pick something specific to this repo — it shouldn't be shared with unrelated projects.",
 	stepMode:  "Biometric: shells out to `op read`, same Touch ID/Windows Hello prompt you already get, cached for the TTL. Service account: headless, token-based, no prompts at all, but requires a manual token-store step after init (see the printed instructions).",
@@ -47,7 +47,7 @@ func isHelpRequest(input string) bool {
 // promptWithHelp runs prompt in a loop: if the result is a bare "?", it
 // prints that step's help text and re-prompts instead of returning.
 //
-//nolint:unused // wired in by Task 6/7 (called from runWizard)
+//nolint:unused // wired in by Task 6/8 (called from runWizard)
 func promptWithHelp(step int, prompt func() (string, error)) (string, error) {
 	for {
 		val, err := prompt()
@@ -64,9 +64,9 @@ func promptWithHelp(step int, prompt func() (string, error)) (string, error) {
 // runWizard walks the vault/mode/items/ttl steps, skipping any step whose
 // value was already seeded from a flag (seeded.set[...] true), and returns
 // the completed state. It does not call runInit — the caller (newInitCmd's
-// RunE, Task 7) does that once the wizard returns.
+// RunE, Task 8) does that once the wizard returns.
 //
-//nolint:unused // wired in by Task 7
+//nolint:unused // wired in by Task 8
 func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	s := &wizardState{
 		Vault: seeded.Vault, Mode: seeded.Mode, TTL: seeded.TTL,
@@ -139,7 +139,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	return s, nil
 }
 
-//nolint:unused // wired in by Task 7 (called from runWizard)
+//nolint:unused // wired in by Task 8 (called from runWizard)
 func itemsSummary(s *wizardState) string {
 	n := len(s.Items) + len(s.MoveItems)
 	if s.MoveFrom != "" {
