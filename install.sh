@@ -10,6 +10,38 @@ info()  { printf '\033[1;34m==>\033[0m %s\n' "$1"; }
 warn()  { printf '\033[1;33m!!\033[0m %s\n' "$1"; }
 fail()  { printf '\033[1;31mxx\033[0m %s\n' "$1" >&2; exit 1; }
 
+# with_spinner LABEL CMD...: runs CMD in the background with a spinner next
+# to LABEL while stdout is a real terminal; otherwise just prints LABEL and
+# runs CMD in the foreground (piped output, CI — no animation to corrupt).
+# Propagates CMD's exit status. Never use this for a command that might
+# prompt for input (e.g. sudo) — the spinner's carriage returns would
+# mangle the prompt.
+with_spinner() {
+	label=$1
+	shift
+	if [ ! -t 1 ]; then
+		info "$label"
+		"$@"
+		return $?
+	fi
+
+	"$@" &
+	cmd_pid=$!
+	i=0
+	while kill -0 "$cmd_pid" 2>/dev/null; do
+		case $((i % 4)) in
+		0) frame='|' ;; 1) frame='/' ;; 2) frame='-' ;; *) frame='\' ;;
+		esac
+		printf '\r\033[1;34m==>\033[0m %s %s' "$label" "$frame"
+		i=$((i + 1))
+		sleep 0.15
+	done
+	status=0
+	wait "$cmd_pid" || status=$?
+	printf '\r\033[1;34m==>\033[0m %s   \n' "$label"
+	return "$status"
+}
+
 # version_ge A B: true if version A >= B (dotted numeric versions).
 version_ge() {
 	[ "$1" = "$2" ] && return 0
@@ -43,7 +75,10 @@ elif ! version_ge "$GO_VERSION" "$MIN_GO_VERSION"; then
 		read -r reply </dev/tty
 		case "$reply" in
 		[Yy]*)
-			eval "$upgrade_cmd" </dev/tty
+			case "$upgrade_cmd" in
+			*sudo*) eval "$upgrade_cmd" </dev/tty ;;
+			*) with_spinner "Upgrading go..." sh -c "$upgrade_cmd" ;;
+			esac
 			GO_VERSION=$(go version | sed -n 's/^go version go\([0-9.]*\).*/\1/p')
 			version_ge "$GO_VERSION" "$MIN_GO_VERSION" && still_stale=""
 			;;
@@ -52,8 +87,7 @@ elif ! version_ge "$GO_VERSION" "$MIN_GO_VERSION"; then
 	[ -n "$still_stale" ] && fail "$still_stale"
 fi
 
-info "Installing timeshare and timesharedd..."
-GOPROXY=direct go install "${MODULE}/cmd/timeshare@latest" "${MODULE}/cmd/timesharedd@latest"
+with_spinner "Installing timeshare and timesharedd..." env GOPROXY=direct go install "${MODULE}/cmd/timeshare@latest" "${MODULE}/cmd/timesharedd@latest"
 
 GOBIN=$(go env GOPATH)/bin
 
