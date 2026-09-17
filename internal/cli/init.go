@@ -46,6 +46,110 @@ func writeTimeshareConfig(path string, cfg config.Config) error {
 	return os.WriteFile(path, []byte(content), 0o644) //nolint:gosec // .timeshare.yml is meant to be committed to git and world-readable; it never contains a credential
 }
 
+// runInit is the shared execution core for a fully-specified wizardState:
+// create the vault, move/collect items, write .timeshare.yml. Both the
+// --non-interactive path and the completed interactive wizard funnel
+// through this — it doesn't know or care which one produced s.
+func runInit(cwd string, s *wizardState) error {
+	if err := s.validateComplete(); err != nil {
+		return err
+	}
+	parsedTTL, err := time.ParseDuration(s.TTL)
+	if err != nil {
+		return fmt.Errorf("invalid --ttl: %w", err)
+	}
+
+	cfgPath := filepath.Join(cwd, ".timeshare.yml")
+	if _, statErr := os.Stat(cfgPath); statErr == nil && !s.Force {
+		return fmt.Errorf("%s already exists (pass --force to overwrite)", cfgPath)
+	}
+
+	fmt.Printf("Creating dedicated vault %q...\n", s.Vault)
+	vaultID, err := onepassword.CreateVault(s.Vault)
+	if err != nil {
+		return fmt.Errorf("creating vault: %w", err)
+	}
+
+	items := append([]string{}, s.Items...)
+	if s.MoveFrom != "" {
+		existing, err := onepassword.ListItems(s.MoveFrom)
+		if err != nil {
+			return fmt.Errorf("listing items in %s: %w", s.MoveFrom, err)
+		}
+		for _, it := range existing {
+			fmt.Printf("Moving %q into %q...\n", it.Title, s.Vault)
+			if err := onepassword.MoveItem(it.ID, s.MoveFrom, s.Vault); err != nil {
+				return fmt.Errorf("moving item %q failed (already moved: %v): %w", it.Title, items, err)
+			}
+			items = append(items, it.Title)
+		}
+	}
+
+	for _, spec := range s.MoveItems {
+		// Split on the rightmost "/" rather than the first, so a source
+		// vault name that itself contains "/" still parses its item ref
+		// correctly in the vault/item form. A bare vault name for the
+		// interactive picker must not contain "/" at all — see the
+		// flag's help text.
+		var sourceVault, ref string
+		var hasRef bool
+		if idx := strings.LastIndex(spec, "/"); idx >= 0 {
+			sourceVault, ref, hasRef = spec[:idx], spec[idx+1:], true
+		} else {
+			sourceVault = spec
+		}
+
+		var toMove []onepassword.Item
+		if hasRef {
+			item, err := onepassword.GetItem(sourceVault, ref)
+			if err != nil {
+				printSuggestions(sourceVault, ref)
+				return fmt.Errorf("resolving %q in vault %q: %w", ref, sourceVault, err)
+			}
+			toMove = []onepassword.Item{item}
+		} else {
+			sourceItems, err := onepassword.ListItems(sourceVault)
+			if err != nil {
+				return fmt.Errorf("listing items in %s: %w", sourceVault, err)
+			}
+			picked, err := pickItems(sourceVault, sourceItems)
+			if err != nil {
+				return fmt.Errorf("picking items from %s: %w", sourceVault, err)
+			}
+			toMove = picked
+		}
+
+		for _, item := range toMove {
+			fmt.Printf("Moving %q into %q...\n", item.Title, s.Vault)
+			if err := onepassword.MoveItem(item.ID, sourceVault, s.Vault); err != nil {
+				return fmt.Errorf("moving item %q failed (already moved: %v): %w", item.Title, items, err)
+			}
+			items = append(items, item.Title)
+		}
+	}
+
+	cfg := config.Config{
+		Vault: s.Vault,
+		Mode:  config.Mode(s.Mode),
+		TTL:   parsedTTL,
+		Items: items,
+	}
+
+	if s.Mode == string(config.ModeServiceAccount) {
+		fmt.Println("Create a service account:")
+		fmt.Printf("  op service-account create %s --vault=%s:read_items\n", s.Vault+"-timeshare", vaultID)
+		fmt.Println("Then store the printed token in your OS keychain:")
+		fmt.Printf("  <paste token> | timeshare token store %s\n", s.Vault)
+	}
+
+	if err := writeTimeshareConfig(cfgPath, cfg); err != nil {
+		return fmt.Errorf("writing .timeshare.yml: %w", err)
+	}
+
+	fmt.Printf("Wrote %s\n", cfgPath)
+	return nil
+}
+
 func newInitCmd() *cobra.Command {
 	var vaultName string
 	var mode string
@@ -59,111 +163,12 @@ func newInitCmd() *cobra.Command {
 		Use:   "init",
 		Short: "Scaffold a dedicated vault and .timeshare.yml for this repo",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if vaultName == "" {
-				return fmt.Errorf("--vault is required (e.g. --vault=project-x-secrets)")
-			}
-			if moveFrom == "" && len(explicitItems) == 0 && len(moveItems) == 0 {
-				return fmt.Errorf("at least one of --move-from, --item, or --move-item is required (a config with an empty items list will never load)")
-			}
-			parsedTTL, err := time.ParseDuration(ttl)
-			if err != nil {
-				return fmt.Errorf("invalid --ttl: %w", err)
-			}
-
 			cwd, err := os.Getwd()
 			if err != nil {
 				return err
 			}
-
-			cfgPath := filepath.Join(cwd, ".timeshare.yml")
-			if _, err := os.Stat(cfgPath); err == nil && !force {
-				return fmt.Errorf("%s already exists (pass --force to overwrite)", cfgPath)
-			}
-
-			fmt.Printf("Creating dedicated vault %q...\n", vaultName)
-			vaultID, err := onepassword.CreateVault(vaultName)
-			if err != nil {
-				return fmt.Errorf("creating vault: %w", err)
-			}
-
-			items := append([]string{}, explicitItems...)
-			if moveFrom != "" {
-				existing, err := onepassword.ListItems(moveFrom)
-				if err != nil {
-					return fmt.Errorf("listing items in %s: %w", moveFrom, err)
-				}
-				for _, it := range existing {
-					fmt.Printf("Moving %q into %q...\n", it.Title, vaultName)
-					if err := onepassword.MoveItem(it.ID, moveFrom, vaultName); err != nil {
-						return fmt.Errorf("moving item %q failed (already moved: %v): %w", it.Title, items, err)
-					}
-					items = append(items, it.Title)
-				}
-			}
-
-			for _, spec := range moveItems {
-				// Split on the rightmost "/" rather than the first, so a
-				// source vault name that itself contains "/" still parses
-				// its item ref correctly in the vault/item form. A bare
-				// vault name for the interactive picker must not contain
-				// "/" at all — see the flag's help text.
-				var sourceVault, ref string
-				var hasRef bool
-				if idx := strings.LastIndex(spec, "/"); idx >= 0 {
-					sourceVault, ref, hasRef = spec[:idx], spec[idx+1:], true
-				} else {
-					sourceVault = spec
-				}
-
-				var toMove []onepassword.Item
-				if hasRef {
-					item, err := onepassword.GetItem(sourceVault, ref)
-					if err != nil {
-						printSuggestions(sourceVault, ref)
-						return fmt.Errorf("resolving %q in vault %q: %w", ref, sourceVault, err)
-					}
-					toMove = []onepassword.Item{item}
-				} else {
-					sourceItems, err := onepassword.ListItems(sourceVault)
-					if err != nil {
-						return fmt.Errorf("listing items in %s: %w", sourceVault, err)
-					}
-					picked, err := pickItems(sourceVault, sourceItems)
-					if err != nil {
-						return fmt.Errorf("picking items from %s: %w", sourceVault, err)
-					}
-					toMove = picked
-				}
-
-				for _, item := range toMove {
-					fmt.Printf("Moving %q into %q...\n", item.Title, vaultName)
-					if err := onepassword.MoveItem(item.ID, sourceVault, vaultName); err != nil {
-						return fmt.Errorf("moving item %q failed (already moved: %v): %w", item.Title, items, err)
-					}
-					items = append(items, item.Title)
-				}
-			}
-
-			cfg := config.Config{
-				Vault: vaultName,
-				Mode:  config.Mode(mode),
-				TTL:   parsedTTL,
-				Items: items,
-			}
-
-			if mode == string(config.ModeServiceAccount) {
-				fmt.Println("Create a service account:")
-				fmt.Printf("  op service-account create %s --vault=%s:read_items\n", vaultName+"-timeshare", vaultID)
-				fmt.Println("Then store the printed token in your OS keychain:")
-				fmt.Printf("  <paste token> | timeshare token store %s\n", vaultName)
-			}
-
-			if err := writeTimeshareConfig(cfgPath, cfg); err != nil {
-				return fmt.Errorf("writing .timeshare.yml: %w", err)
-			}
-
-			fmt.Printf("Wrote %s\n", cfgPath)
-			return nil
+			s := newWizardState(cmd, vaultName, mode, ttl, moveFrom, explicitItems, moveItems, force)
+			return runInit(cwd, s)
 		},
 	}
 
