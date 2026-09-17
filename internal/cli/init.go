@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/spf13/cobra"
 	"timeshare/internal/config"
 	"timeshare/internal/onepassword"
+
+	"github.com/spf13/cobra"
 )
 
 func hourDuration() time.Duration { return time.Hour }
@@ -21,7 +22,7 @@ func writeTimeshareConfig(path string, cfg config.Config) error {
 	for _, item := range cfg.Items {
 		content += "  - " + item + "\n"
 	}
-	return os.WriteFile(path, []byte(content), 0o644)
+	return os.WriteFile(path, []byte(content), 0o644) //nolint:gosec // .timeshare.yml is meant to be committed to git and world-readable; it never contains a credential
 }
 
 func newInitCmd() *cobra.Command {

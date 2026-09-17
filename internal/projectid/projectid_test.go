@@ -10,10 +10,10 @@ func TestFindGitRoot(t *testing.T) {
 	tmp := t.TempDir()
 	root := filepath.Join(tmp, "repo")
 	nested := filepath.Join(root, "a", "b")
-	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(nested, 0o755); err != nil {
+	if err := os.MkdirAll(nested, 0o750); err != nil {
 		t.Fatal(err)
 	}
 

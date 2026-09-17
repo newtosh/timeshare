@@ -6,9 +6,10 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/spf13/cobra"
 	"timeshare/internal/client"
 	"timeshare/internal/daemon"
+
+	"github.com/spf13/cobra"
 )
 
 func newRunCmd() *cobra.Command {
@@ -47,7 +48,7 @@ func newRunCmd() *cobra.Command {
 				env = append(env, name+"="+value)
 			}
 
-			child := exec.Command(args[0], args[1:]...)
+			child := exec.Command(args[0], args[1:]...) //nolint:gosec // args come from the user's own command line, exactly like `env`/`op run`
 			child.Env = env
 			child.Stdin = os.Stdin
 			child.Stdout = os.Stdout

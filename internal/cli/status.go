@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	"timeshare/internal/client"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
-	"timeshare/internal/client"
 )
 
 var okStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
@@ -35,7 +36,7 @@ func newStatusCmd() *cobra.Command {
 				fmt.Println("daemon not running")
 				return nil
 			}
-			conn.Close()
+			_ = conn.Close()
 
 			fmt.Println(okStyle.Render("✓") + fmt.Sprintf(" daemon reachable for vault %q (%d items configured)", cfg.Vault, len(cfg.Items)))
 			return nil

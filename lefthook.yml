@@ -1,0 +1,17 @@
+pre-commit:
+  parallel: true
+  commands:
+    fmt-check:
+      glob: "*.go"
+      run: make fmt-check
+    vet:
+      glob: "*.go"
+      run: make vet
+    lint:
+      glob: "*.go"
+      run: make lint
+
+pre-push:
+  commands:
+    test:
+      run: make test

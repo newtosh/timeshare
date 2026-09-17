@@ -31,7 +31,7 @@ type rawConfig struct {
 
 // Load reads and validates a .timeshare.yml file at path.
 func Load(path string) (Config, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is the caller's own repo's .timeshare.yml, not attacker-controlled input
 	if err != nil {
 		return Config{}, fmt.Errorf("reading config: %w", err)
 	}

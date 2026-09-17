@@ -14,7 +14,7 @@ import (
 )
 
 func runOp(args ...string) ([]byte, error) {
-	cmd := exec.Command("op", args...)
+	cmd := exec.Command("op", args...) //nolint:gosec // fixed binary name "op"; args are constructed by this package, not attacker-controlled
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
