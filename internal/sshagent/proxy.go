@@ -13,6 +13,8 @@ import (
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
+
+	"github.com/newtosh/timeshare/internal/peercred"
 )
 
 // ErrNotSupported is returned by every Proxy method that would manage
@@ -119,6 +121,9 @@ func Serve(l net.Listener, p *Proxy) error {
 		}
 		go func() {
 			defer func() { _ = conn.Close() }()
+			if err := peercred.Verify(conn); err != nil {
+				return
+			}
 			_ = agent.ServeAgent(p, conn)
 		}()
 	}
