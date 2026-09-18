@@ -34,7 +34,7 @@ timeshare already solves the equivalent problem for plain secrets: a repo declar
 The proxy:
 
 1. Connects to the real 1Password agent (`~/.1password/agent.sock`) as an upstream client.
-2. On startup, resolves each `.timeshare.yml` `ssh_keys` entry to a public-key fingerprint via `op item get` (one `op` call per entry, once, before the listener starts accepting).
+2. On startup, resolves each `.timeshare.yml` `ssh_keys` entry (a `<vault>/<item>` reference — SSH keys stay wherever they already live in 1Password, they are not copied into the repo's own dedicated vault the way secret `items` are) to a fingerprint via `op item get` (one `op` call per entry, once, before the listener starts accepting).
 3. On `REQUEST_IDENTITIES`, forwards upstream, then filters the response down to only allow-listed fingerprints before replying to the client.
 4. On `SIGN_REQUEST`, checks the target key's fingerprint against the allow-list AND the run's TTL deadline. Both pass → forwards the raw signing request upstream and relays the signature back untouched, no inspection of its contents. Either check fails → replies `SSH_AGENT_FAILURE`.
 
@@ -43,7 +43,7 @@ No `Add()`/`Remove()` support — read-only passthrough; timeshare never manages
 ## Components
 
 - **`internal/sshagent/proxy.go`** (new package) — `Proxy` type wrapping an `agent.Agent`-compatible server: holds an upstream `agent.ExtendedAgent` client, an allow-listed fingerprint set, and a TTL deadline. Implements `List()` and `Sign()`; `Add()`/`Remove()`/`Lock()`/`Unlock()` return "not supported."
-- **`internal/sshagent/resolve.go`** (new) — resolves `.timeshare.yml` `ssh_keys` entries (item title or ID, same rules as `items`/`from-item`) to fingerprints via `op item get <ref> --vault=<vault> --fields label=fingerprint --format=json`. Verified live: an SSH Key category item exposes this field directly (no `--reveal` needed — it's not a concealed field), already formatted as `SHA256:<base64>`, the exact format `golang.org/x/crypto/ssh`'s own `ssh.FingerprintSHA256` produces — no reformatting needed to compare against identities the upstream agent returns. Fails fast, with the same "did you mean" suggestion pattern `printSuggestions` (`internal/cli/init.go`) already uses for items, if an entry doesn't resolve or isn't an SSH Key category item.
+- **`internal/sshagent/resolve.go`** (new) — resolves `.timeshare.yml` `ssh_keys` entries, each a `<vault>/<item-title-or-id>` reference (same split-on-rightmost-`/` syntax `--from-item` already uses — see `internal/cli/init.go`'s handling of `s.FromItems`), to fingerprints via `op item get <ref> --vault=<vault> --fields label=fingerprint --format=json`. Verified live: an SSH Key category item exposes this field directly (no `--reveal` needed — it's not a concealed field), already formatted as `SHA256:<base64>`, the exact format `golang.org/x/crypto/ssh`'s own `ssh.FingerprintSHA256` produces — no reformatting needed to compare against identities the upstream agent returns. Fails fast, with the same "did you mean" suggestion pattern `printSuggestions` already uses for items, if an entry doesn't resolve or isn't an SSH Key category item.
 - **`internal/cli/run.go`** (existing `run` command) — when `.timeshare.yml`'s `ssh_keys` is non-empty: before exec'ing the wrapped command, resolve fingerprints, start the proxy on a temp socket (`0600`, `$XDG_RUNTIME_DIR/timeshare-ssh-<pid>-<nanos>.sock`), set `SSH_AUTH_SOCK` in the child's env alongside the existing resolved secret env vars. On subprocess exit (including signal-driven exit), close the listener and remove the socket file unconditionally (`defer`).
 - **`internal/config/config.go`** — `Config` gains `SSHKeys []string` (`yaml:"ssh_keys"`), optional (zero value is a valid, common case — most repos won't use this). `rawConfig` and `Load`'s validation mirror `Items`'s existing handling, except an empty `ssh_keys` is not an error (unlike the existing "must list at least one item" rule for `items`).
 
@@ -65,14 +65,14 @@ ttl: 4h
 items:
   - DATABASE_URL
 ssh_keys:
-  - deploy-key-prod
+  - Private/deploy-key-prod
 ```
 
-`ssh_keys` entries are 1Password item titles or IDs, validated to be an SSH Key category item — at `run` time, not at `config.Load` time. `Load` stays a pure parse (no `op` calls), matching its current contract; `status`/`doctor` calling `Load` today never shells out, and this doesn't change that.
+`ssh_keys` entries are `<vault>/<item-title-or-id>` references, validated to be an SSH Key category item — at `run` time, not at `config.Load` time. Unlike `items`, these are deliberately **not** scoped to `vault:` (the repo's own dedicated vault) — SSH keys are typically personal, cross-project, and already live wherever the user keeps them in 1Password; `init` never copies or moves them anywhere, only records a reference. `Load` stays a pure parse (no `op` calls), matching its current contract; `status`/`doctor` calling `Load` today never shells out, and this doesn't change that.
 
 ## CLI / wizard surface
 
-- **`timeshare init`**: new optional wizard step after "Items to move" — "SSH keys to grant access to," reusing the existing fzf-style picker (`pickItems`'s underlying `runFzfList`) against `op item list --categories "SSH Key"` results. Skippable — unlike the items step, an empty selection here is valid and the norm. Flag form: `--ssh-key <vault>/<item>` (repeatable), mirroring `--from-item`'s `<vault>/<item-name-or-id>` syntax.
+- **`timeshare init`**: new optional wizard step after "Items to move" — "SSH keys to grant access to." Reuses the existing two-step flow `--from-item`'s interactive picker already has (pick a vault via `pickVault`, then pick items from it), swapping in a category-filtered listing (`op item list --categories "SSH Key"`) for the second step, and stores `<vault>/<item-id>` — same construction `wizard.go` already does for `s.FromItems`. Skippable — unlike the items step, an empty selection here is valid and the norm. Flag form: `--ssh-key <vault>/<item>` (repeatable), mirroring `--from-item`'s `<vault>/<item-name-or-id>` syntax.
 - **`timeshare run`**: no new flags. Reads `ssh_keys` from config automatically, exactly as it already reads `items`.
 - **`timeshare doctor`**: one additional check, only run when the current repo's `ssh_keys` is non-empty — confirm `~/.1password/agent.sock` (or 1Password's configured agent path, if customized) is reachable, so a broken upstream is caught by `doctor` rather than surfacing mid-script as a confusing `run` failure.
 
