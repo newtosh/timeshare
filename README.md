@@ -20,10 +20,13 @@ only one is fully usable end to end right now:
   side is implemented, but nothing in `timeshare` provisions the token for
   you automatically — see [Service-account mode](#service-account-mode)
   below.
-- **Platforms:** Linux is the primary target and has run for real. macOS
-  peer-verification code exists and cross-compiles cleanly (`GOOS=darwin`),
-  but has not yet been run against a real Mac. Windows is explicitly out of
-  scope for now (Unix socket IPC).
+- **Platforms:** Linux is the primary target and has run for real. macOS:
+  daemon auto-spawn, Unix socket permissions, and peer verification
+  (Xucred/LOCAL_PEERCRED) have been confirmed working against a real Mac —
+  but item resolution currently only works for Login-category items (see
+  [Known gaps](#known-gaps)), so a full read/run cycle isn't yet verified
+  end to end on macOS. Windows is explicitly out of scope for now (Unix
+  socket IPC).
 
 ## Install
 
@@ -188,3 +191,8 @@ pre-commit/pre-push hooks, and workflow conventions.
   read re-prompts. Planned as a follow-up once the in-memory version has
   seen real use (see the design spec in `docs/superpowers/specs/`).
 - Windows isn't supported (Unix socket IPC).
+- `read`/`run` only resolve Login-category items — the field is hardcoded
+  to `password` when building the `op://` reference, so Secure Notes and
+  items with custom fields aren't usable yet. Item titles containing `/`
+  or other characters `op` treats specially in a secret reference can also
+  fail to resolve; referencing by item ID works around it in the meantime.
