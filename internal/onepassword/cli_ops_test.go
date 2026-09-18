@@ -4,6 +4,7 @@ package onepassword
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -132,5 +133,41 @@ func TestCopyItemLeavesSourceInPlace(t *testing.T) {
 	}
 	if len(dstItems) != 1 || dstItems[0].Title != itemName {
 		t.Fatalf("expected dst vault to contain the copied item, got %v", dstItems)
+	}
+}
+
+func TestGetItemFingerprintAndListSSHKeyItems(t *testing.T) {
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	vault := "timeshare-test-sshkey-" + suffix
+
+	vaultID, err := CreateVault(vault)
+	if err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+	t.Cleanup(func() { _ = DeleteVault(vaultID) })
+
+	itemName := "timeshare-test-sshkey-item-" + suffix
+	if _, err := runOp("item", "create", "--category=SSH Key", "--title="+itemName, "--vault="+vault, "--ssh-generate-key=ed25519"); err != nil {
+		t.Fatalf("creating SSH Key item: %v", err)
+	}
+
+	fp, err := GetItemFingerprint(vault, itemName)
+	if err != nil {
+		t.Fatalf("GetItemFingerprint: %v", err)
+	}
+	if !strings.HasPrefix(fp, "SHA256:") {
+		t.Fatalf("expected fingerprint to start with SHA256:, got %q", fp)
+	}
+
+	items, err := ListSSHKeyItems(vault)
+	if err != nil {
+		t.Fatalf("ListSSHKeyItems: %v", err)
+	}
+	if len(items) != 1 || items[0].Title != itemName {
+		t.Fatalf("expected exactly the one SSH Key item, got %v", items)
+	}
+
+	if _, err := GetItemFingerprint(vault, "definitely-not-a-real-item"); err == nil {
+		t.Fatal("expected error for nonexistent item")
 	}
 }

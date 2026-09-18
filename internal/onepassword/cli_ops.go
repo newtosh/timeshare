@@ -158,3 +158,45 @@ func GetItem(vault, ref string) (Item, error) {
 	}
 	return Item{ID: raw.ID, Title: raw.Title}, nil
 }
+
+// GetItemFingerprint resolves ref (a title or ID) within vault to that
+// item's SSH key fingerprint, e.g. "SHA256:...". Only valid for SSH Key
+// category items — any other category has no "fingerprint" field, so op
+// returns an error.
+func GetItemFingerprint(vault, ref string) (string, error) {
+	out, err := runOp("item", "get", ref, "--vault="+vault, "--fields", "label=fingerprint", "--format=json")
+	if err != nil {
+		return "", err
+	}
+	var raw struct {
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return "", fmt.Errorf("parsing op item get fingerprint output: %w", err)
+	}
+	if raw.Value == "" {
+		return "", fmt.Errorf("item %q in vault %q has no fingerprint field (not an SSH Key item?)", ref, vault)
+	}
+	return raw.Value, nil
+}
+
+// ListSSHKeyItems lists only SSH Key category items in vault — the
+// source list for the init wizard's SSH-key picker.
+func ListSSHKeyItems(vault string) ([]Item, error) {
+	out, err := runOp("item", "list", "--vault="+vault, "--categories=SSH Key", "--format=json")
+	if err != nil {
+		return nil, err
+	}
+	var raw []struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, fmt.Errorf("parsing op item list output: %w", err)
+	}
+	items := make([]Item, len(raw))
+	for i, it := range raw {
+		items[i] = Item{ID: it.ID, Title: it.Title}
+	}
+	return items, nil
+}
