@@ -8,10 +8,12 @@ import (
 
 // pickItems shows an fzf-style, always-filtering multi-select over
 // vaultItems (from sourceVault, used only for the picker title) and
-// returns the items the user selected (space/tab to toggle, enter to
-// confirm). An empty selection is a valid return — the caller decides
-// whether that's acceptable.
-func pickItems(sourceVault string, vaultItems []onepassword.Item) ([]onepassword.Item, error) {
+// returns the items the user selected (space to toggle, enter to confirm).
+// When requireOne is false, an empty selection is a valid return — the
+// caller treats that as "picked nothing, skip" and prints its own message;
+// when true, the picker itself blocks enter until at least one item is
+// checked, so this never returns an empty slice on success.
+func pickItems(sourceVault string, vaultItems []onepassword.Item, requireOne bool) ([]onepassword.Item, error) {
 	if len(vaultItems) == 0 {
 		return nil, fmt.Errorf("vault %q has no items to pick from", sourceVault)
 	}
@@ -23,7 +25,7 @@ func pickItems(sourceVault string, vaultItems []onepassword.Item) ([]onepassword
 		items[i] = fzfItem{Label: fmt.Sprintf("%s (%s)", it.Title, it.ID), Value: it.ID}
 	}
 
-	chosen, err := runFzfList(fmt.Sprintf("Select items to move from %q", sourceVault), items, true)
+	chosen, err := runFzfList(fmt.Sprintf("Select items to move from %q", sourceVault), items, true, requireOne)
 	if err != nil {
 		return nil, fmt.Errorf("item picker: %w", err)
 	}
@@ -52,7 +54,7 @@ func pickVault(vaults []onepassword.Vault) (string, error) {
 		items[i] = fzfItem{Label: fmt.Sprintf("%s (%s)", v.Name, v.ID), Value: v.ID}
 	}
 
-	chosen, err := runFzfList("Existing vault to pick items from", items, false)
+	chosen, err := runFzfList("Existing vault to pick items from", items, false, false)
 	if err != nil {
 		return "", fmt.Errorf("vault picker: %w", err)
 	}

@@ -117,7 +117,7 @@ func runInit(cwd string, s *wizardState) error {
 			if err != nil {
 				return fmt.Errorf("listing items in %s: %w", sourceVault, err)
 			}
-			picked, err := pickItems(sourceVault, sourceItems)
+			picked, err := pickItems(sourceVault, sourceItems, false)
 			if err != nil {
 				return fmt.Errorf("picking items from %s: %w", sourceVault, err)
 			}

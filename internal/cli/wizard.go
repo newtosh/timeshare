@@ -159,16 +159,15 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 		}
 
 		// An empty items list is never a valid end state for this tool
-		// (see validateComplete), so the wizard must not be able to
-		// produce one: re-open the picker against the SAME vault on an
-		// empty pick, rather than re-asking for the vault too. pickItems
-		// already reports "No items selected..." — no need to repeat it.
-		var picked []onepassword.Item
-		for len(picked) == 0 {
-			picked, err = pickItems(sourceVault, sourceItems)
-			if err != nil {
-				return nil, fmt.Errorf("picking items from %s: %w", sourceVault, err)
-			}
+		// (see validateComplete): requireOne=true makes pickItems itself
+		// block enter until at least one item is checked, instead of us
+		// looping and re-running the picker (which used to spin up a
+		// brand new tea.Program on an empty submit — since it's inline,
+		// not alt-screen, that visibly reprinted the whole list below
+		// what was already on screen).
+		picked, err := pickItems(sourceVault, sourceItems, true)
+		if err != nil {
+			return nil, fmt.Errorf("picking items from %s: %w", sourceVault, err)
 		}
 		s.MoveItems = make([]string, len(picked))
 		for i, item := range picked {
