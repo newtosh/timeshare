@@ -70,6 +70,18 @@ const (
 	minFzfListHeight = 3
 )
 
+// anyChecked reports whether at least one value in checked is true. A
+// toggled-off item stays in the map as false rather than being deleted, so
+// len(checked) == 0 is not a valid "nothing checked" test.
+func anyChecked(checked map[string]bool) bool {
+	for _, v := range checked {
+		if v {
+			return true
+		}
+	}
+	return false
+}
+
 // resizeListToVisible sets l's height to match its own current visible-item
 // count (clamped to [minFzfListHeight, maxFzfListHeight] and to whatever
 // room termHeight leaves), instead of always rendering a fixed-size block
@@ -108,13 +120,15 @@ func resizeListToVisible(l *list.Model, termHeight int) {
 type fzfListModel struct {
 	list       list.Model
 	multi      bool
+	requireOne bool // multi-select only: block enter until something's checked
 	checked    map[string]bool
 	termHeight int
+	message    string // transient status line — e.g. "select at least one item"
 	aborted    bool
 	submitted  bool
 }
 
-func newFzfListModel(title string, items []fzfItem, multi bool) fzfListModel {
+func newFzfListModel(title string, items []fzfItem, multi, requireOne bool) fzfListModel {
 	listItems := make([]list.Item, len(items))
 	for i, it := range items {
 		listItems[i] = it
@@ -145,9 +159,10 @@ func newFzfListModel(title string, items []fzfItem, multi bool) fzfListModel {
 	resizeListToVisible(&l, 0)
 
 	return fzfListModel{
-		list:    l,
-		multi:   multi,
-		checked: checked,
+		list:       l,
+		multi:      multi,
+		requireOne: requireOne,
+		checked:    checked,
 	}
 }
 
@@ -161,11 +176,25 @@ func (m fzfListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		resizeListToVisible(&m.list, m.termHeight)
 		return m, nil
 	case tea.KeyMsg:
+		if msg.String() != "enter" {
+			m.message = ""
+		}
 		switch msg.String() {
 		case "ctrl+c", "esc":
 			m.aborted = true
 			return m, tea.Quit
 		case "enter":
+			// A multi-select submitted with nothing checked must not quit:
+			// the caller (pickItems) requires at least one item, and if we
+			// quit here anyway, the caller re-runs this whole picker as a
+			// brand new tea.Program — which, since this is an inline (not
+			// alt-screen) program, prints its first frame below whatever
+			// this run already left on screen instead of replacing it,
+			// visibly "reprinting the entire list". Block inline instead.
+			if m.multi && m.requireOne && !anyChecked(m.checked) {
+				m.message = "Select at least one item (space to toggle), or esc to cancel."
+				return m, nil
+			}
 			m.submitted = true
 			return m, tea.Quit
 		case "up":
@@ -228,20 +257,26 @@ func (m fzfListModel) View() string {
 		hint = "up/down navigate  tab complete  space toggle  enter confirm"
 	}
 	b.WriteString(lipgloss.NewStyle().Foreground(colorDim).Render(hint))
+
+	if m.message != "" {
+		b.WriteString("\n")
+		b.WriteString(lipgloss.NewStyle().Foreground(colorValue).Render(m.message))
+	}
 	return b.String()
 }
 
 // runFzfList runs the picker to completion and returns the chosen items:
 // in single mode, the highlighted item at Enter; in multi mode, everything
-// toggled with space (Enter with nothing toggled returns empty — the
-// caller decides whether that's acceptable, matching pickItems's existing
-// contract).
-func runFzfList(title string, items []fzfItem, multi bool) ([]fzfItem, error) {
+// toggled with space. requireOne (multi mode only) blocks enter — inline,
+// without quitting the program — until at least one item is checked; when
+// false, enter with nothing checked returns an empty slice, which callers
+// that treat "picked nothing" as a valid skip rely on.
+func runFzfList(title string, items []fzfItem, multi, requireOne bool) ([]fzfItem, error) {
 	if len(items) == 0 {
 		return nil, fmt.Errorf("nothing to pick from")
 	}
 
-	m := newFzfListModel(title, items, multi)
+	m := newFzfListModel(title, items, multi, requireOne)
 	result, err := tea.NewProgram(m).Run()
 	if err != nil {
 		return nil, fmt.Errorf("picker: %w", err)
