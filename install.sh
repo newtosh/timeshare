@@ -93,7 +93,15 @@ elif ! version_ge "$GO_VERSION" "$MIN_GO_VERSION"; then
 	[ -n "$still_stale" ] && fail "$still_stale"
 fi
 
-with_spinner "Installing timeshare and timesharedd..." env GOPROXY=direct go install "${MODULE}/cmd/timeshare@latest" "${MODULE}/cmd/timesharedd@latest"
+# GOPRIVATE (not GOPROXY=direct): this module is untagged, so
+# proxy.golang.org can cache a stale pseudo-version resolution after a new
+# commit lands. GOPRIVATE skips both the proxy AND sum.golang.org for this
+# module specifically — GOPROXY=direct alone still tries to verify against
+# sum.golang.org, which 404s for a version the proxy never saw and falls
+# back to a second network round-trip (`git ls-remote` against github.com
+# directly), a real failure point on networks that restrict direct GitHub
+# access. GOPRIVATE avoids that entirely without disabling sumdb globally.
+with_spinner "Installing timeshare and timesharedd..." env GOPRIVATE="$MODULE" go install "${MODULE}/cmd/timeshare@latest" "${MODULE}/cmd/timesharedd@latest"
 
 GOBIN=$(go env GOPATH)/bin
 
