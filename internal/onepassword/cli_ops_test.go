@@ -90,3 +90,47 @@ func TestCreateVaultMoveItemCleanup(t *testing.T) {
 		t.Fatalf("expected both test vaults in ListVaults output, got %v", vaults)
 	}
 }
+
+func TestCopyItemLeavesSourceInPlace(t *testing.T) {
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	srcVault := "timeshare-test-copysrc-" + suffix
+	dstVault := "timeshare-test-copydst-" + suffix
+
+	srcID, err := CreateVault(srcVault)
+	if err != nil {
+		t.Fatalf("CreateVault(src): %v", err)
+	}
+	dstID, err := CreateVault(dstVault)
+	if err != nil {
+		t.Fatalf("CreateVault(dst): %v", err)
+	}
+	t.Cleanup(func() {
+		_ = DeleteVault(srcID)
+		_ = DeleteVault(dstID)
+	})
+
+	itemName := "timeshare-test-copyitem-" + suffix
+	if err := CreateLoginItem(srcVault, itemName, "user", "pass"); err != nil {
+		t.Fatalf("CreateLoginItem: %v", err)
+	}
+
+	if err := CopyItem(itemName, srcVault, dstVault); err != nil {
+		t.Fatalf("CopyItem: %v", err)
+	}
+
+	srcItems, err := ListItems(srcVault)
+	if err != nil {
+		t.Fatalf("ListItems(src): %v", err)
+	}
+	if len(srcItems) != 1 || srcItems[0].Title != itemName {
+		t.Fatalf("expected src vault to still contain the original item, got %v", srcItems)
+	}
+
+	dstItems, err := ListItems(dstVault)
+	if err != nil {
+		t.Fatalf("ListItems(dst): %v", err)
+	}
+	if len(dstItems) != 1 || dstItems[0].Title != itemName {
+		t.Fatalf("expected dst vault to contain the copied item, got %v", dstItems)
+	}
+}

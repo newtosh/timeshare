@@ -71,18 +71,19 @@ func runExistingConfigMenu(cwd, cfgPath string, cfg config.Config) error {
 		if err != nil {
 			return fmt.Errorf("picking items from %s: %w", sourceVault, err)
 		}
-		items, moveErr := moveInto(cfg.Vault, sourceVault, picked, cfg.Items)
+		items, transferErr := transferInto(cfg.Vault, sourceVault, picked, cfg.Items, false)
 		cfg.Items = items
 		// Persist even on a partial failure: some items may really have
-		// moved in 1Password before the error, and without this write
-		// .timeshare.yml would silently drift out of sync with reality.
+		// been copied in 1Password before the error, and without this
+		// write .timeshare.yml would silently drift out of sync with
+		// reality.
 		if writeErr := config.Write(cfgPath, cfg); writeErr != nil {
-			if moveErr != nil {
-				return fmt.Errorf("%w (also failed writing partial config: %w)", moveErr, writeErr)
+			if transferErr != nil {
+				return fmt.Errorf("%w (also failed writing partial config: %w)", transferErr, writeErr)
 			}
 			return writeErr
 		}
-		return moveErr
+		return transferErr
 
 	case menuChangeTTL:
 		ttl := formatTTL(cfg.TTL)

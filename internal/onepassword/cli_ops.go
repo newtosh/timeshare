@@ -14,10 +14,17 @@ import (
 )
 
 func runOp(args ...string) ([]byte, error) {
+	return runOpStdin(nil, args...)
+}
+
+func runOpStdin(stdin []byte, args ...string) ([]byte, error) {
 	cmd := exec.Command("op", args...) //nolint:gosec // fixed binary name "op"; args are constructed by this package, not attacker-controlled
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
+	}
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("op %v: %w: %s", args, err, stderr.String())
 	}
@@ -91,6 +98,19 @@ func MoveItem(itemName, fromVault, toVault string) error {
 		"--current-vault="+fromVault,
 		"--destination-vault="+toVault,
 	)
+	return err
+}
+
+// CopyItem duplicates itemName from fromVault into toVault, leaving the
+// original in place. `op` has no dedicated copy subcommand; this pipes
+// `op item get --format=json` into `op item create -`, the pattern op's
+// own --help documents for duplicating an item across vaults.
+func CopyItem(itemName, fromVault, toVault string) error {
+	raw, err := runOp("item", "get", itemName, "--vault="+fromVault, "--format=json")
+	if err != nil {
+		return err
+	}
+	_, err = runOpStdin(raw, "item", "create", "--vault="+toVault, "-")
 	return err
 }
 

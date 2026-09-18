@@ -65,15 +65,15 @@ Pick an auth mode:
 
 <img src="docs/images/wizard-auth-mode.png" alt="timeshare init: auth mode step" width="600">
 
-Then pick which items to move into the new vault from an existing one — a
+Then pick which items to copy into the new vault from an existing one — a
 live, fuzzy-filtering, fzf-style picker, not a flag you have to get exactly
 right on the first try:
 
 <img src="docs/images/wizard-items-picker.png" alt="timeshare init: items picker" width="600">
 
 The wizard creates a dedicated 1Password vault, writes `.timeshare.yml` at
-the repo root, and walks the items you picked out of the existing vault
-into the new one via `op item move`.
+the repo root, and copies the items you picked from the existing vault into
+the new one (via `op item get | op item create`) — the originals stay put.
 
 **Scripts and CI** should use the flag-driven form instead — it never
 prompts:
@@ -82,8 +82,9 @@ prompts:
 timeshare init --vault=my-project-secrets --mode=biometric --item=DATABASE_URL --item=STRIPE_KEY --non-interactive
 ```
 
-`--move-from=<existing-vault>` (instead of or alongside `--item`) walks
-every matching item out of an existing vault the same way the wizard does.
+`--from=<existing-vault>` (instead of or alongside `--item`) copies every
+matching item out of an existing vault the same way the wizard does. Add
+`--move` to move items out of the source vault instead of copying them.
 Run `timeshare init --help` for the full flag list — short forms exist for
 the common ones (`-v`, `-m`, `-t`, `-i`, `-f`, `-n`).
 

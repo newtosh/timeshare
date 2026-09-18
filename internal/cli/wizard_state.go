@@ -18,28 +18,31 @@ type wizardState struct {
 	Vault     string
 	Mode      string
 	TTL       string
-	MoveFrom  string
+	FromVault string
 	Items     []string
-	MoveItems []string
+	FromItems []string
 	Force     bool
+	Move      bool
 
 	set map[string]bool
 }
 
 // wizardFlagNames are the flags that count toward "the user passed
-// something" for entry-mode dispatch. --force and --non-interactive are
-// deliberately excluded — they modify behavior, not wizard input.
-var wizardFlagNames = []string{"vault", "mode", "ttl", "item", "move-from", "move-item"}
+// something" for entry-mode dispatch. --force, --move and
+// --non-interactive are deliberately excluded — they modify behavior, not
+// wizard input.
+var wizardFlagNames = []string{"vault", "mode", "ttl", "item", "from", "from-item"}
 
-func newWizardState(cmd *cobra.Command, vault, mode, ttl, moveFrom string, items, moveItems []string, force bool) *wizardState {
+func newWizardState(cmd *cobra.Command, vault, mode, ttl, fromVault string, items, fromItems []string, force, move bool) *wizardState {
 	s := &wizardState{
 		Vault:     vault,
 		Mode:      mode,
 		TTL:       ttl,
-		MoveFrom:  moveFrom,
+		FromVault: fromVault,
 		Items:     items,
-		MoveItems: moveItems,
+		FromItems: fromItems,
 		Force:     force,
+		Move:      move,
 		set:       make(map[string]bool),
 	}
 	for _, name := range wizardFlagNames {
@@ -56,8 +59,8 @@ func (s *wizardState) validateComplete() error {
 	if s.Vault == "" {
 		return fmt.Errorf("--vault is required (e.g. --vault=project-x-secrets)")
 	}
-	if s.MoveFrom == "" && len(s.Items) == 0 && len(s.MoveItems) == 0 {
-		return fmt.Errorf("at least one of --move-from, --item, or --move-item is required (a config with an empty items list will never load)")
+	if s.FromVault == "" && len(s.Items) == 0 && len(s.FromItems) == 0 {
+		return fmt.Errorf("at least one of --from, --item, or --from-item is required (a config with an empty items list will never load)")
 	}
 	if _, err := time.ParseDuration(s.TTL); err != nil {
 		return fmt.Errorf("invalid --ttl: %w", err)
