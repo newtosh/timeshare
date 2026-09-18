@@ -116,11 +116,54 @@ ttl: 4h
 items:
   - DATABASE_URL
   - STRIPE_KEY
+ssh_keys:
+  - Private/deploy-key-prod
 ```
 
 `items` is an allow-list enforced by the daemon itself, independent of
 whatever the underlying 1Password vault grant would otherwise permit — see
 [SECURITY.md](SECURITY.md).
+
+`ssh_keys` is optional and works differently: each entry is a
+`<vault>/<item>` reference to an SSH Key item that already exists in
+1Password — `init` never moves or copies it anywhere, only records where
+it lives. See [SSH key access](#ssh-key-access), below.
+
+## SSH key access
+
+`timeshare run` can also grant a repo time-boxed access to SSH keys
+already stored in 1Password, without exposing every key loaded in your
+account (1Password's own SSH agent, unfiltered, does exactly that to
+anything that connects to its socket).
+
+```sh
+timeshare init --ssh-key=Private/deploy-key-prod --vault=my-project-secrets --mode=biometric --item=DATABASE_URL --non-interactive
+# or pick interactively: bare `timeshare init` has a skippable "SSH keys" wizard step
+
+timeshare run -- git push
+# SSH_AUTH_SOCK points at a proxy, filtered to just the ssh_keys this
+# repo's .timeshare.yml lists, torn down when the command exits
+```
+
+The proxy never holds private key material — it forwards signing
+requests to your real 1Password SSH agent only for allow-listed keys,
+only within the repo's TTL window (same TTL as secrets). Past that
+window, or for any key not listed, the proxy refuses the request; your
+real 1Password agent and every other tool using it are unaffected.
+
+**A config gotcha to know about:** if your `~/.ssh/config` sets
+`IdentityAgent` for a host (rather than relying on the `SSH_AUTH_SOCK`
+env var), OpenSSH's own precedence rules mean that setting wins over
+`run`'s override — `ssh`/`git` will silently keep using your real,
+unfiltered 1Password agent for that host instead of the proxy. Fix it
+per-command with:
+
+```sh
+GIT_SSH_COMMAND='ssh -o IdentityAgent="$SSH_AUTH_SOCK"' timeshare run -- git push
+```
+
+or scope the `IdentityAgent` line in `~/.ssh/config` to a `Host` pattern
+that excludes repos you run through timeshare.
 
 ## Commands
 
@@ -131,7 +174,7 @@ whatever the underlying 1Password vault grant would otherwise permit — see
 | `timeshare run -- <cmd>` | Resolve every item in `.timeshare.yml`, inject as env vars, exec `<cmd>` |
 | `timeshare status` | Confirm the daemon is reachable for the current project (non-zero exit if not) |
 | `timeshare lock` | Evict this project's cached secrets immediately |
-| `timeshare doctor` | Check: `op` on PATH, daemon socket reachable, `.timeshare.yml` present — non-zero exit if any check fails |
+| `timeshare doctor` | Check: `op` on PATH, daemon socket reachable, `.timeshare.yml` present, and (if `ssh_keys` is set) the upstream SSH agent reachable — non-zero exit if any check fails |
 | `timeshare token store <vault>` / `token delete <vault>` | Manage a service-account token in the OS keychain (see below) |
 
 Run `timeshare <command> --help` for flags.
@@ -196,3 +239,7 @@ pre-commit/pre-push hooks, and workflow conventions.
   items with custom fields aren't usable yet. Item titles containing `/`
   or other characters `op` treats specially in a secret reference can also
   fail to resolve; referencing by item ID works around it in the meantime.
+- `timeshare doctor`'s SSH check confirms the upstream agent socket is
+  reachable; it doesn't detect an `~/.ssh/config` `IdentityAgent`
+  override that would silently bypass the proxy (see [SSH key
+  access](#ssh-key-access)) — documented, not auto-detected.
