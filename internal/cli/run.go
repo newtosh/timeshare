@@ -54,14 +54,16 @@ func newRunCmd() *cobra.Command {
 				env = append(env, name+"="+value)
 			}
 
+			cleanup := func() {}
 			if len(cfg.SSHKeys) > 0 {
-				sockPath, cleanup, err := startSSHProxy(cfg.SSHKeys, cfg.TTL)
+				sockPath, proxyCleanup, err := startSSHProxy(cfg.SSHKeys, cfg.TTL)
 				if err != nil {
 					return fmt.Errorf("starting SSH key proxy: %w", err)
 				}
-				defer cleanup()
+				cleanup = proxyCleanup
 				env = append(env, "SSH_AUTH_SOCK="+sockPath)
 			}
+			defer cleanup()
 
 			child := exec.Command(args[0], args[1:]...) //nolint:gosec // args come from the user's own command line, exactly like `env`/`op run`
 			child.Env = env
@@ -71,6 +73,8 @@ func newRunCmd() *cobra.Command {
 			if err := child.Run(); err != nil {
 				var ee *exec.ExitError
 				if errors.As(err, &ee) {
+					// os.Exit bypasses defer entirely — cleanup must run explicitly on this path
+					cleanup()
 					os.Exit(ee.ExitCode())
 				}
 				return err
