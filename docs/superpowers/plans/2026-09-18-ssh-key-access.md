@@ -751,6 +751,306 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 ---
 
+### Task 3.5: `internal/peercred` — extract peer-UID verification for reuse
+
+**Added during execution, not in the original plan** — an opus-model security review of Task 3 flagged that the SSH proxy socket (Task 4, below) would otherwise have no peer-UID verification, unlike the daemon socket's existing `SO_PEERCRED`/`Xucred` check (`internal/daemon/peer_unix.go`, `peer_darwin.go`). SECURITY.md's whole allow-list trust model rests on "a second local user can't connect at all" — the SSH proxy socket needs the identical guarantee, not just `0600` file permissions. Ruling: extract the existing daemon peer-check logic into a small reusable package rather than duplicating it, then have both the daemon and the SSH proxy call it.
+
+**Files:**
+- Create: `internal/peercred/peercred_unix.go` (linux, `SO_PEERCRED`)
+- Create: `internal/peercred/peercred_darwin.go` (darwin, `LOCAL_PEERCRED`/`Xucred`)
+- Create: `internal/peercred/peercred_stub.go` (other platforms, fails closed)
+- Modify: `internal/daemon/peer_unix.go`, `internal/daemon/peer_darwin.go`, `internal/daemon/peer_stub.go` — `Server.VerifyPeer` becomes a thin delegate to `peercred.Verify`, same signature, same behavior, no test changes needed.
+- Modify: `internal/sshagent/proxy.go` — `Serve` calls `peercred.Verify(conn)` right after `Accept`, closing and skipping any connection that fails it, mirroring `daemon.Server.HandleConn`'s pattern exactly.
+
+**Interfaces:**
+- Produces: `peercred.Verify(conn net.Conn) error` — Task 4's `run.go` doesn't call this directly (it's inside `sshagent.Serve`, already wired), but should know it exists when reviewing the security posture of the socket it creates.
+
+- [ ] **Step 1: Create the package, moving logic verbatim**
+
+`internal/peercred/peercred_unix.go`:
+
+```go
+//go:build linux
+
+package peercred
+
+import (
+	"fmt"
+	"net"
+	"os"
+
+	"golang.org/x/sys/unix"
+)
+
+// Verify rejects any connection from a UID other than the calling
+// process's own — a second local user must not even be able to connect,
+// not merely fail to authenticate.
+func Verify(conn net.Conn) error {
+	unixConn, ok := conn.(*net.UnixConn)
+	if !ok {
+		return fmt.Errorf("not a unix socket connection")
+	}
+	raw, err := unixConn.SyscallConn()
+	if err != nil {
+		return err
+	}
+
+	var ucred *unix.Ucred
+	var credErr error
+	err = raw.Control(func(fd uintptr) {
+		ucred, credErr = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
+	})
+	if err != nil {
+		return err
+	}
+	if credErr != nil {
+		return credErr
+	}
+
+	if int(ucred.Uid) != os.Getuid() {
+		return fmt.Errorf("connecting UID %d does not match this process's UID %d", ucred.Uid, os.Getuid())
+	}
+	return nil
+}
+```
+
+`internal/peercred/peercred_darwin.go`:
+
+```go
+//go:build darwin
+
+package peercred
+
+import (
+	"fmt"
+	"net"
+	"os"
+
+	"golang.org/x/sys/unix"
+)
+
+// Verify rejects any connection from a UID other than the calling
+// process's own. Darwin has no SO_PEERCRED; the equivalent is
+// LOCAL_PEERCRED/Xucred, which carries UID/GID but not PID.
+func Verify(conn net.Conn) error {
+	unixConn, ok := conn.(*net.UnixConn)
+	if !ok {
+		return fmt.Errorf("not a unix socket connection")
+	}
+	raw, err := unixConn.SyscallConn()
+	if err != nil {
+		return err
+	}
+
+	var xucred *unix.Xucred
+	var credErr error
+	err = raw.Control(func(fd uintptr) {
+		xucred, credErr = unix.GetsockoptXucred(int(fd), unix.SOL_LOCAL, unix.LOCAL_PEERCRED)
+	})
+	if err != nil {
+		return err
+	}
+	if credErr != nil {
+		return credErr
+	}
+	if xucred.Ngroups == 0 {
+		return fmt.Errorf("LOCAL_PEERCRED returned no groups, refusing to trust peer")
+	}
+
+	if int(xucred.Uid) != os.Getuid() {
+		return fmt.Errorf("connecting UID %d does not match this process's UID %d", xucred.Uid, os.Getuid())
+	}
+	return nil
+}
+```
+
+`internal/peercred/peercred_stub.go`:
+
+```go
+//go:build !linux && !darwin
+
+package peercred
+
+import (
+	"fmt"
+	"net"
+)
+
+// Verify is not implemented on this platform. It fails closed rather
+// than silently skipping the security check.
+func Verify(net.Conn) error {
+	return fmt.Errorf("peer UID verification is not implemented on this platform")
+}
+```
+
+- [ ] **Step 2: Delegate the daemon's existing `VerifyPeer` to the new package**
+
+In `internal/daemon/peer_unix.go`, replace the whole function body — change:
+
+```go
+func (s *Server) VerifyPeer(conn net.Conn) error {
+	unixConn, ok := conn.(*net.UnixConn)
+	...
+	if int(ucred.Uid) != os.Getuid() {
+		return fmt.Errorf("connecting UID %d does not match daemon UID %d", ucred.Uid, os.Getuid())
+	}
+	return nil
+}
+```
+
+to:
+
+```go
+func (s *Server) VerifyPeer(conn net.Conn) error {
+	return peercred.Verify(conn)
+}
+```
+
+removing the now-unused `"golang.org/x/sys/unix"` and `"os"` imports (keep `"fmt"` only if still used elsewhere in the file — it isn't, so drop it too) and adding `"github.com/newtosh/timeshare/internal/peercred"`. Apply the exact same delegation pattern to `internal/daemon/peer_darwin.go` and `internal/daemon/peer_stub.go`.
+
+- [ ] **Step 3: Wire verification into the SSH proxy's `Serve`**
+
+In `internal/sshagent/proxy.go`, change `Serve` from:
+
+```go
+func Serve(l net.Listener, p *Proxy) error {
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			return err
+		}
+		go func() {
+			defer func() { _ = conn.Close() }()
+			_ = agent.ServeAgent(p, conn)
+		}()
+	}
+}
+```
+
+to:
+
+```go
+func Serve(l net.Listener, p *Proxy) error {
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			return err
+		}
+		go func() {
+			defer func() { _ = conn.Close() }()
+			if err := peercred.Verify(conn); err != nil {
+				return
+			}
+			_ = agent.ServeAgent(p, conn)
+		}()
+	}
+}
+```
+
+adding `"github.com/newtosh/timeshare/internal/peercred"` to the file's imports.
+
+- [ ] **Step 4: Test**
+
+Add `internal/peercred/peercred_test.go` (build-tag-free, runs on every platform — the platform-specific `Verify` implementations are exercised via whichever one actually compiles for the CI runner's OS):
+
+```go
+package peercred
+
+import (
+	"net"
+	"testing"
+)
+
+// TestVerifyAcceptsSameUID proves the happy path: a same-process (hence
+// same-UID) connection over a real unix socket is accepted, not
+// rejected. Cross-UID rejection isn't tested here — a single-user CI
+// container can't simulate a second UID connecting, matching the
+// existing daemon peer-verification tests' own documented limitation.
+func TestVerifyAcceptsSameUID(t *testing.T) {
+	sockPath := t.TempDir() + "/peercred-test.sock"
+	ln, err := net.Listen("unix", sockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	connCh := make(chan net.Conn, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err == nil {
+			connCh <- conn
+		}
+	}()
+
+	client, err := net.Dial("unix", sockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	server := <-connCh
+	defer server.Close()
+
+	if err := Verify(server); err != nil {
+		t.Fatalf("expected same-UID connection to be accepted, got: %v", err)
+	}
+}
+
+func TestVerifyRejectsNonUnixConn(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	connCh := make(chan net.Conn, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err == nil {
+			connCh <- conn
+		}
+	}()
+
+	client, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	server := <-connCh
+	defer server.Close()
+
+	if err := Verify(server); err == nil {
+		t.Fatal("expected a non-unix-socket connection to be rejected")
+	}
+}
+```
+
+Run: `cd /home/jonn/src/timeshare && go test ./internal/peercred/... ./internal/daemon/... ./internal/sshagent/... -v`
+Expected: PASS everywhere — the daemon's own pre-existing `TestVerifyPeerAcceptsSameUID` (Linux) / equivalent (darwin) must still pass unchanged, proving the delegation preserves exact behavior.
+
+Then: `go build ./... && go vet ./...`
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /home/jonn/src/timeshare
+git add internal/peercred/ internal/daemon/peer_unix.go internal/daemon/peer_darwin.go internal/daemon/peer_stub.go internal/sshagent/proxy.go
+git commit -m "peercred: extract peer-UID verification, use it for the SSH proxy socket too
+
+The SSH proxy socket (added in the previous commits, wired into \`run\`
+next) had no peer-UID check — only 0600 file permissions, unlike the
+daemon socket's existing SO_PEERCRED/Xucred verification. Extracted that
+check into internal/peercred so both sockets share one implementation
+instead of duplicating platform-specific syscall code. daemon.Server's
+VerifyPeer now delegates to it; behavior and its existing tests are
+unchanged.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+---
+
 ### Task 4: `timeshare run` — wire up the proxy
 
 **Files:**
