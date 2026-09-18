@@ -54,20 +54,40 @@ You'll also need the [1Password CLI](https://developer.1password.com/docs/cli/)
 Building from a local clone instead (e.g. to test an unmerged change) is a
 contributor workflow — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Quickstart (biometric mode)
+## Quickstart
 
-From inside a git repo:
+From inside a git repo, bare `timeshare init` drops you into a guided
+wizard — no flags to look up first:
+
+<img src="docs/images/wizard-vault-name.png" alt="timeshare init: repo vault name step" width="600">
+
+Pick an auth mode:
+
+<img src="docs/images/wizard-auth-mode.png" alt="timeshare init: auth mode step" width="600">
+
+Then pick which items to move into the new vault from an existing one — a
+live, fuzzy-filtering, fzf-style picker, not a flag you have to get exactly
+right on the first try:
+
+<img src="docs/images/wizard-items-picker.png" alt="timeshare init: items picker" width="600">
+
+The wizard creates a dedicated 1Password vault, writes `.timeshare.yml` at
+the repo root, and walks the items you picked out of the existing vault
+into the new one via `op item move`.
+
+**Scripts and CI** should use the flag-driven form instead — it never
+prompts:
 
 ```sh
-timeshare init --vault=my-project-secrets --mode=biometric --item=DATABASE_URL --item=STRIPE_KEY
+timeshare init --vault=my-project-secrets --mode=biometric --item=DATABASE_URL --item=STRIPE_KEY --non-interactive
 ```
 
-This creates a dedicated 1Password vault, writes `.timeshare.yml` at the
-repo root, and (if you pass `--move-from=<existing-vault>` instead of or
-alongside `--item`) walks matching items out of an existing vault into the
-new one via `op item move`.
+`--move-from=<existing-vault>` (instead of or alongside `--item`) walks
+every matching item out of an existing vault the same way the wizard does.
+Run `timeshare init --help` for the full flag list — short forms exist for
+the common ones (`-v`, `-m`, `-t`, `-i`, `-f`, `-n`).
 
-Then:
+Then, either way:
 
 ```sh
 timeshare read DATABASE_URL
@@ -121,7 +141,7 @@ bug: it created a real 1Password service account and threw the only
 credential away). Current flow:
 
 ```sh
-timeshare init --vault=my-project-secrets --mode=service-account --item=DATABASE_URL
+timeshare init --vault=my-project-secrets --mode=service-account --item=DATABASE_URL --non-interactive
 # prints the exact `op service-account create ...` command to run
 
 op service-account create my-project-secrets-timeshare --vault=<vault-id>:read_items
