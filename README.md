@@ -227,9 +227,9 @@ pre-commit/pre-push hooks, and workflow conventions.
 
 - `timeshare status` doesn't yet show per-secret TTLs (spec goal, not yet
   implemented — the cache has no enumeration method).
-- `timeshare doctor` checks three things (`op` on PATH, daemon reachable,
-  config present); it doesn't yet check `op` version, token validity, or
-  socket permission bits.
+- `timeshare doctor` checks `op` on PATH, daemon reachable, config
+  present, and (if `ssh_keys` is set) the upstream SSH agent; it doesn't
+  yet check `op` version, token validity, or socket permission bits.
 - No disk-persisted cache — a daemon restart mid-TTL-window means the next
   read re-prompts. Planned as a follow-up once the in-memory version has
   seen real use (see the design spec in `docs/superpowers/specs/`).
