@@ -62,19 +62,56 @@ func (d fzfDelegate) Render(w io.Writer, m list.Model, index int, item list.Item
 	_, _ = fmt.Fprint(w, marker+checkbox+textStyle.Render(it.Label))
 }
 
-// maxFzfListHeight caps how many rows the picker's list ever occupies,
-// independent of the real terminal height — see the WindowSizeMsg handler.
-const maxFzfListHeight = 14
+// maxFzfListHeight caps how many rows the picker's list can ever occupy.
+// minFzfListHeight is the floor even with 0-1 matches, so the layout
+// doesn't jump around too abruptly as the filtered count changes.
+const (
+	maxFzfListHeight = 14
+	minFzfListHeight = 3
+)
+
+// resizeListToVisible sets l's height to match its own current visible-item
+// count (clamped to [minFzfListHeight, maxFzfListHeight] and to whatever
+// room termHeight leaves), instead of always rendering a fixed-size block
+// padded with blank rows. Without this, a 5-item list and a 40-item list
+// render the same tall block — the gap between the last real row and the
+// stats/prompt line below is wasted blank space, and it makes every step
+// in the wizard look like a different height depending on how many matches
+// happen to be visible, which reads as inconsistent/broken rather than
+// intentional.
+func resizeListToVisible(l *list.Model, termHeight int) {
+	h := len(l.VisibleItems())
+	if h < minFzfListHeight {
+		h = minFzfListHeight
+	}
+	if h > maxFzfListHeight {
+		h = maxFzfListHeight
+	}
+	if termHeight > 0 {
+		if cap := termHeight - 2; cap >= minFzfListHeight && h > cap {
+			h = cap
+		}
+	}
+	l.SetSize(l.Width(), h)
+}
 
 // fzfListModel is a minimal fzf-style picker: always-active fuzzy filter,
-// no title/pagination/help/status chrome (we render our own stats line and
-// prompt), single- or multi-select via space/tab.
+// no title/pagination/help/status chrome (we render our own stats line,
+// prompt, and key hint), single- or multi-select.
+//
+// Keys: up/down (bubbles/list defaults) to move the cursor, tab to
+// autocomplete the filter text to the currently highlighted item's full
+// label (which re-filters down to just that item, so enter immediately
+// confirms it), space to toggle the highlighted item in multi-select mode
+// (a no-op in single-select mode — space is just typed into the filter),
+// enter to confirm, esc/ctrl+c to abort.
 type fzfListModel struct {
-	list      list.Model
-	multi     bool
-	checked   map[string]bool
-	aborted   bool
-	submitted bool
+	list       list.Model
+	multi      bool
+	checked    map[string]bool
+	termHeight int
+	aborted    bool
+	submitted  bool
 }
 
 func newFzfListModel(title string, items []fzfItem, multi bool) fzfListModel {
@@ -105,6 +142,7 @@ func newFzfListModel(title string, items []fzfItem, multi bool) fzfListModel {
 	// to Filtering after — it doesn't touch the already-computed items.
 	l.SetFilterText("")
 	l.SetFilterState(list.Filtering)
+	resizeListToVisible(&l, 0)
 
 	return fzfListModel{
 		list:    l,
@@ -118,19 +156,9 @@ func (m fzfListModel) Init() tea.Cmd { return nil }
 func (m fzfListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		// Cap at the terminal's real height minus room for our stats/prompt
-		// lines: without this, the list fills the whole window with blank
-		// padding rows for a short match list, pushing the actual matches
-		// up and off the top of the visible viewport. fzf's own picker
-		// stays similarly compact rather than taking over the screen.
-		h := msg.Height - 2
-		if h > maxFzfListHeight {
-			h = maxFzfListHeight
-		}
-		if h < 3 {
-			h = 3
-		}
-		m.list.SetSize(msg.Width, h)
+		m.termHeight = msg.Height
+		m.list.SetSize(msg.Width, m.list.Height())
+		resizeListToVisible(&m.list, m.termHeight)
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -140,18 +168,45 @@ func (m fzfListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			m.submitted = true
 			return m, tea.Quit
-		case "tab", " ":
+		case "up":
+			// bubbles/list only handles CursorUp/CursorDown while
+			// filterState != Filtering — since this picker stays in
+			// Filtering permanently (so the text box keeps receiving
+			// keystrokes; see newFzfListModel), those built-in bindings
+			// never fire and up/down would otherwise land in
+			// handleFiltering(), which only recognizes accept/cancel
+			// bindings and the text input itself. Move the cursor
+			// ourselves instead of forwarding to list.Update().
+			m.list.CursorUp()
+			return m, nil
+		case "down":
+			m.list.CursorDown()
+			return m, nil
+		case "tab":
+			// Autocomplete to the currently highlighted item's full label.
+			// Re-filtering to that exact text narrows VisibleItems down to
+			// just it, so a following enter confirms it directly.
+			if it, ok := m.list.SelectedItem().(fzfItem); ok {
+				m.list.SetFilterText(it.Label)
+				m.list.SetFilterState(list.Filtering)
+			}
+			resizeListToVisible(&m.list, m.termHeight)
+			return m, nil
+		case " ":
 			if m.multi {
 				if it, ok := m.list.SelectedItem().(fzfItem); ok {
 					m.checked[it.Value] = !m.checked[it.Value]
 				}
 				return m, nil
 			}
+			// Single-select: space is just typed filter text — fall
+			// through to the normal list.Update() below.
 		}
 	}
 
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
+	resizeListToVisible(&m.list, m.termHeight)
 	return m, cmd
 }
 
@@ -166,12 +221,19 @@ func (m fzfListModel) View() string {
 
 	prompt := lipgloss.NewStyle().Foreground(colorAccent).Render("> ")
 	b.WriteString(prompt + m.list.FilterInput.View())
+	b.WriteString("\n")
+
+	hint := "up/down navigate  tab complete  enter select"
+	if m.multi {
+		hint = "up/down navigate  tab complete  space toggle  enter confirm"
+	}
+	b.WriteString(lipgloss.NewStyle().Foreground(colorDim).Render(hint))
 	return b.String()
 }
 
 // runFzfList runs the picker to completion and returns the chosen items:
 // in single mode, the highlighted item at Enter; in multi mode, everything
-// toggled with space/tab (Enter with nothing toggled returns empty — the
+// toggled with space (Enter with nothing toggled returns empty — the
 // caller decides whether that's acceptable, matching pickItems's existing
 // contract).
 func runFzfList(title string, items []fzfItem, multi bool) ([]fzfItem, error) {
