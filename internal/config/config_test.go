@@ -141,3 +141,62 @@ func TestWriteLoadRoundTripYAMLSpecialContent(t *testing.T) {
 		t.Fatalf("items round-trip: got %v, want %v", loaded.Items, cfg.Items)
 	}
 }
+
+func TestLoadWithSSHKeys(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, `
+vault: project-x-secrets
+mode: biometric
+ttl: 4h
+items:
+  - DATABASE_URL
+ssh_keys:
+  - Private/deploy-key-prod
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.SSHKeys) != 1 || cfg.SSHKeys[0] != "Private/deploy-key-prod" {
+		t.Errorf("SSHKeys = %v", cfg.SSHKeys)
+	}
+}
+
+func TestLoadWithoutSSHKeysIsValid(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, `
+vault: v
+mode: biometric
+ttl: 1h
+items: [X]
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.SSHKeys) != 0 {
+		t.Errorf("expected no SSHKeys, got %v", cfg.SSHKeys)
+	}
+}
+
+func TestWriteLoadRoundTripSSHKeys(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{
+		Vault:   "project-x-secrets",
+		Mode:    ModeBiometric,
+		TTL:     4 * time.Hour,
+		Items:   []string{"DATABASE_URL"},
+		SSHKeys: []string{"Private/deploy-key-prod"},
+	}
+	path := filepath.Join(dir, ".timeshare.yml")
+	if err := Write(path, cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("written config failed to reload: %v", err)
+	}
+	if len(loaded.SSHKeys) != 1 || loaded.SSHKeys[0] != "Private/deploy-key-prod" {
+		t.Fatalf("SSHKeys round-trip: got %v", loaded.SSHKeys)
+	}
+}
