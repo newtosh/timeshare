@@ -144,6 +144,7 @@ func startSSHProxy(sshKeys []string, ttl time.Duration) (string, func(), error) 
 	if err := os.Chmod(sockPath, 0o600); err != nil {
 		_ = ln.Close()
 		_ = upstreamConn.Close()
+		_ = os.Remove(sockPath)
 		return "", nil, fmt.Errorf("securing SSH proxy socket: %w", err)
 	}
 
