@@ -1,9 +1,9 @@
 // Package sshagent implements a filtering ssh-agent protocol proxy: it
-// forwards List/Sign requests to a real upstream agent, but only for a
-// fixed set of allow-listed key fingerprints, and only before a fixed
-// deadline. It never holds private key material — every Sign call that
-// passes the filter forwards the raw request upstream and relays the
-// signature back unmodified.
+// forwards List/Sign/SignWithFlags requests to a real upstream agent, but
+// only for a fixed set of allow-listed key fingerprints, and only before
+// a fixed deadline. It never holds private key material — every Sign
+// call that passes the filter forwards the raw request upstream and
+// relays the signature back unmodified.
 package sshagent
 
 import (
@@ -21,11 +21,15 @@ import (
 // store of its own.
 var ErrNotSupported = errors.New("timeshare: sshagent proxy does not support this operation")
 
-// Proxy implements agent.Agent as a filtering pass-through to an
+// Proxy implements agent.ExtendedAgent as a filtering pass-through to an
 // upstream agent (the real 1Password SSH agent in production, a fake
-// keyring in tests).
+// keyring in tests). ExtendedAgent (not just Agent) matters because the
+// ssh-agent protocol server drops the client's requested signature flags
+// entirely when the agent it wraps doesn't implement SignWithFlags — for
+// an RSA key that silently downgrades every signature to legacy
+// ssh-rsa/SHA-1, which modern OpenSSH servers reject.
 type Proxy struct {
-	upstream agent.Agent
+	upstream agent.ExtendedAgent
 	allowed  map[string]bool
 	deadline time.Time
 }
@@ -34,7 +38,7 @@ type Proxy struct {
 // given fingerprints (e.g. "SHA256:...", exactly as returned by
 // ssh.FingerprintSHA256 or by 1Password's own "fingerprint" item field —
 // the two formats are identical, byte for byte) until deadline.
-func NewProxy(upstream agent.Agent, fingerprints []string, deadline time.Time) *Proxy {
+func NewProxy(upstream agent.ExtendedAgent, fingerprints []string, deadline time.Time) *Proxy {
 	allowed := make(map[string]bool, len(fingerprints))
 	for _, fp := range fingerprints {
 		allowed[fp] = true
@@ -74,6 +78,26 @@ func (p *Proxy) Sign(key ssh.PublicKey, data []byte) (*ssh.Signature, error) {
 		return nil, errors.New("timeshare: SSH key not in this repo's allow-list")
 	}
 	return p.upstream.Sign(key, data)
+}
+
+// SignWithFlags signs like Sign, but allows the client to request a
+// specific signature algorithm (e.g. rsa-sha2-256 instead of the legacy
+// ssh-rsa/SHA-1) — same allow-list and deadline guards as Sign, then
+// forwards to the upstream ExtendedAgent unmodified.
+func (p *Proxy) SignWithFlags(key ssh.PublicKey, data []byte, flags agent.SignatureFlags) (*ssh.Signature, error) {
+	if !time.Now().Before(p.deadline) {
+		return nil, errors.New("timeshare: SSH key grant TTL expired")
+	}
+	if !p.allowed[ssh.FingerprintSHA256(key)] {
+		return nil, errors.New("timeshare: SSH key not in this repo's allow-list")
+	}
+	return p.upstream.SignWithFlags(key, data, flags)
+}
+
+// Extension is not supported — this proxy only implements the standard
+// List/Sign/SignWithFlags surface.
+func (p *Proxy) Extension(extensionType string, contents []byte) ([]byte, error) {
+	return nil, agent.ErrExtensionUnsupported
 }
 
 func (p *Proxy) Add(agent.AddedKey) error       { return ErrNotSupported }

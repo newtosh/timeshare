@@ -3,12 +3,22 @@ package sshagent
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
 	"testing"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
+
+// newUpstream returns a fresh in-memory keyring as an agent.ExtendedAgent.
+// agent.NewKeyring's declared return type is agent.Agent, but its
+// concrete *keyring type also implements SignWithFlags/Extension, so the
+// assertion always succeeds — this stands in for the real upstream,
+// which is always an agent.ExtendedAgent via agent.NewClient.
+func newUpstream() agent.ExtendedAgent {
+	return agent.NewKeyring().(agent.ExtendedAgent)
+}
 
 // addKey generates a fresh ed25519 key, adds it to kr, and returns its
 // public key plus fingerprint.
@@ -29,7 +39,7 @@ func addKey(t *testing.T, kr agent.Agent) (ssh.PublicKey, string) {
 }
 
 func TestListFiltersToAllowedFingerprint(t *testing.T) {
-	upstream := agent.NewKeyring()
+	upstream := newUpstream()
 	_, allowedFP := addKey(t, upstream)
 	addKey(t, upstream) // a second key, never allow-listed
 
@@ -47,7 +57,7 @@ func TestListFiltersToAllowedFingerprint(t *testing.T) {
 }
 
 func TestSignRejectsNonAllowedKey(t *testing.T) {
-	upstream := agent.NewKeyring()
+	upstream := newUpstream()
 	_, allowedFP := addKey(t, upstream)
 	otherPub, _ := addKey(t, upstream)
 
@@ -58,7 +68,7 @@ func TestSignRejectsNonAllowedKey(t *testing.T) {
 }
 
 func TestSignAllowsAllowedKeyBeforeDeadline(t *testing.T) {
-	upstream := agent.NewKeyring()
+	upstream := newUpstream()
 	allowedPub, allowedFP := addKey(t, upstream)
 
 	p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(time.Hour))
@@ -72,7 +82,7 @@ func TestSignAllowsAllowedKeyBeforeDeadline(t *testing.T) {
 }
 
 func TestSignFailsPastDeadline(t *testing.T) {
-	upstream := agent.NewKeyring()
+	upstream := newUpstream()
 	allowedPub, allowedFP := addKey(t, upstream)
 
 	p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(-time.Second))
@@ -82,7 +92,7 @@ func TestSignFailsPastDeadline(t *testing.T) {
 }
 
 func TestListEmptyPastDeadline(t *testing.T) {
-	upstream := agent.NewKeyring()
+	upstream := newUpstream()
 	addKey(t, upstream)
 
 	p := NewProxy(upstream, nil, time.Now().Add(-time.Second))
@@ -96,7 +106,7 @@ func TestListEmptyPastDeadline(t *testing.T) {
 }
 
 func TestUnsupportedMethodsReturnError(t *testing.T) {
-	p := NewProxy(agent.NewKeyring(), nil, time.Now().Add(time.Hour))
+	p := NewProxy(newUpstream(), nil, time.Now().Add(time.Hour))
 	if err := p.Add(agent.AddedKey{}); err == nil {
 		t.Error("expected Add to fail")
 	}
@@ -105,5 +115,52 @@ func TestUnsupportedMethodsReturnError(t *testing.T) {
 	}
 	if _, err := p.Signers(); err == nil {
 		t.Error("expected Signers to fail")
+	}
+}
+
+func TestSignWithFlagsRejectsNonAllowedKey(t *testing.T) {
+	upstream := newUpstream()
+	_, allowedFP := addKey(t, upstream)
+	otherPub, _ := addKey(t, upstream)
+
+	p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(time.Hour))
+	if _, err := p.SignWithFlags(otherPub, []byte("data"), agent.SignatureFlagRsaSha256); err == nil {
+		t.Fatal("expected error signing with a non-allow-listed key")
+	}
+}
+
+func TestSignWithFlagsAllowsAllowedKeyBeforeDeadline(t *testing.T) {
+	upstream := newUpstream()
+	allowedPub, allowedFP := addKey(t, upstream)
+
+	p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(time.Hour))
+	// flags 0 here: the test key is ed25519, which has no algorithm
+	// choice to make (unlike RSA), so this only exercises the Proxy's
+	// own allow-list/deadline guards and forwarding — not flag
+	// interpretation, which is the trusted upstream library's job.
+	sig, err := p.SignWithFlags(allowedPub, []byte("data"), 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sig == nil {
+		t.Fatal("expected a signature")
+	}
+}
+
+func TestSignWithFlagsFailsPastDeadline(t *testing.T) {
+	upstream := newUpstream()
+	allowedPub, allowedFP := addKey(t, upstream)
+
+	p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(-time.Second))
+	if _, err := p.SignWithFlags(allowedPub, []byte("data"), agent.SignatureFlagRsaSha256); err == nil {
+		t.Fatal("expected error signing past the deadline")
+	}
+}
+
+func TestExtensionReturnsUnsupported(t *testing.T) {
+	p := NewProxy(newUpstream(), nil, time.Now().Add(time.Hour))
+	_, err := p.Extension("foo@example.com", []byte("data"))
+	if !errors.Is(err, agent.ErrExtensionUnsupported) {
+		t.Fatalf("got %v, want agent.ErrExtensionUnsupported", err)
 	}
 }
