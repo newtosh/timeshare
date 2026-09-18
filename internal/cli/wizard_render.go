@@ -6,55 +6,37 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// wizardStep is one row in the step tracker's left column.
+// wizardStep is one entry in the breadcrumb.
 type wizardStep struct {
 	Label string
 	Value string
 	Done  bool
 }
 
-var (
-	wizardCheckStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	wizardValueStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-	wizardActiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Bold(true)
-	wizardDimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	wizardLeftCol     = lipgloss.NewStyle().Width(40).Padding(0, 2, 1, 1).Background(lipgloss.Color("235"))
-	wizardRightCol    = lipgloss.NewStyle().Padding(0, 2, 1, 2).Background(lipgloss.Color("238")).BorderStyle(lipgloss.NormalBorder()).BorderLeft(true).BorderForeground(lipgloss.Color("240"))
-)
-
-// renderStepBlock renders one snapshot of the wizard: a left column listing
-// every step (checkmark + captured value for done steps, an active marker
-// for the current step, dimmed for the rest) beside a right column holding
-// activeContent verbatim (the active step's prompt/help text — the caller
-// owns what that string contains, this function only lays it out).
-//
-// The done/active markers are plain ASCII ("+", "->"), not Unicode glyphs
-// like ✓/▸: those are East Asian Width "Ambiguous" characters, so some
-// terminal/font combinations render them 2 cells wide while lipgloss's
-// column-width math assumes 1 — the mismatch shows up as an unevenly
-// padded background. ASCII is unambiguously 1 cell everywhere, and a
-// ligature-aware font (Fira Code, JetBrains Mono, Cascadia Code, ...)
-// still renders "->" as a clean arrow.
-func renderStepBlock(steps []wizardStep, activeIdx int, activeContent string) string {
-	var left strings.Builder
+// renderBreadcrumb renders the wizard's step progress as a single
+// horizontal line: done steps in green with their captured value in amber,
+// the active step bold near-white, the rest dim — separated by ">" (plain
+// ASCII, not a Unicode arrow: see the ASCII-marker rationale in git history
+// — ambiguous-width glyphs cause uneven rendering on some terminals). No
+// background painting: the wizard paints text only and lets the terminal's
+// own background show through (matches fzf's own look, and avoids the
+// erase/SGR-reset class of bugs an explicitly-painted background invites).
+func renderBreadcrumb(steps []wizardStep, activeIdx int) string {
+	var parts []string
 	for i, st := range steps {
 		switch {
 		case st.Done:
-			left.WriteString(wizardCheckStyle.Render("+") + " " + st.Label)
+			label := lipgloss.NewStyle().Foreground(colorDone).Render(st.Label)
 			if st.Value != "" {
-				left.WriteString("  " + wizardValueStyle.Render(st.Value))
+				label += " " + lipgloss.NewStyle().Foreground(colorValue).Render(st.Value)
 			}
-			left.WriteString("\n")
+			parts = append(parts, label)
 		case i == activeIdx:
-			left.WriteString(wizardActiveStyle.Render("-> "+st.Label) + "\n")
+			parts = append(parts, lipgloss.NewStyle().Foreground(colorActive).Bold(true).Render(st.Label))
 		default:
-			left.WriteString(wizardDimStyle.Render("  "+st.Label) + "\n")
+			parts = append(parts, lipgloss.NewStyle().Foreground(colorDim).Render(st.Label))
 		}
 	}
-
-	return lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		wizardLeftCol.Render(left.String()),
-		wizardRightCol.Render(activeContent),
-	)
+	sep := lipgloss.NewStyle().Foreground(colorSep).Render(" > ")
+	return strings.Join(parts, sep)
 }
