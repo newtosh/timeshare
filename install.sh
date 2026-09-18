@@ -132,10 +132,14 @@ case ":$PATH:" in
 esac
 
 if command -v op >/dev/null 2>&1; then
-	if op whoami >/dev/null 2>&1; then
-		info "1Password CLI (op) found and signed in."
+	# `op whoami` checks for a CLI session token and can report "not signed
+	# in" even when the desktop-app biometric integration works fine —
+	# `op vault list` is what timeshare's own init wizard actually calls,
+	# so it's the real signal for whether things will work.
+	if op vault list >/dev/null 2>&1; then
+		info "1Password CLI (op) found and working."
 	else
-		warn "1Password CLI (op) found but not signed in."
+		warn "1Password CLI (op) found but couldn't list vaults."
 		hint "Run: op signin"
 	fi
 else
@@ -144,5 +148,5 @@ else
 fi
 
 info "Done. Get started in a git repo:"
-hint "timeshare init --vault=<name> --mode=biometric --move-item=<existing-vault>"
+hint "timeshare init"
 info "See https://github.com/newtosh/timeshare#readme for the full walkthrough."
