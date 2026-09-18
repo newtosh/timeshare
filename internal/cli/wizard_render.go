@@ -15,7 +15,9 @@ type wizardStep struct {
 
 // renderBreadcrumb renders the wizard's step progress as a single
 // horizontal line: done steps in green with their captured value in amber,
-// the active step bold near-white, the rest dim — separated by "›". No
+// the active step bold near-white, the rest dim — separated by ">" (plain
+// ASCII, not a Unicode arrow: see the ASCII-marker rationale in git history
+// — ambiguous-width glyphs cause uneven rendering on some terminals). No
 // background painting: the wizard paints text only and lets the terminal's
 // own background show through (matches fzf's own look, and avoids the
 // erase/SGR-reset class of bugs an explicitly-painted background invites).

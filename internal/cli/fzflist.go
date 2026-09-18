@@ -73,7 +73,6 @@ type fzfListModel struct {
 	list      list.Model
 	multi     bool
 	checked   map[string]bool
-	items     []fzfItem
 	aborted   bool
 	submitted bool
 }
@@ -111,7 +110,6 @@ func newFzfListModel(title string, items []fzfItem, multi bool) fzfListModel {
 		list:    l,
 		multi:   multi,
 		checked: checked,
-		items:   items,
 	}
 }
 
