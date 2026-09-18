@@ -81,7 +81,7 @@ func promptWithHelp(step int, prompt func() (string, error)) (string, error) {
 func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	s := &wizardState{
 		Vault: seeded.Vault, Mode: seeded.Mode, TTL: seeded.TTL,
-		MoveFrom: seeded.MoveFrom, Items: seeded.Items, MoveItems: seeded.MoveItems,
+		FromVault: seeded.FromVault, Items: seeded.Items, FromItems: seeded.FromItems,
 		Force: seeded.Force, set: seeded.set,
 	}
 
@@ -97,7 +97,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 		return []wizardStep{
 			{Label: wizardStepLabels[stepVault], Value: s.Vault, Done: s.set["vault"] || answered[stepVault]},
 			{Label: wizardStepLabels[stepMode], Value: s.Mode, Done: s.set["mode"] || answered[stepMode]},
-			{Label: wizardStepLabels[stepItems], Value: itemsSummary(s), Done: s.set["item"] || s.set["move-from"] || s.set["move-item"] || answered[stepItems]},
+			{Label: wizardStepLabels[stepItems], Value: itemsSummary(s), Done: s.set["item"] || s.set["from"] || s.set["from-item"] || answered[stepItems]},
 			{Label: wizardStepLabels[stepTTL], Value: s.TTL, Done: s.set["ttl"] || answered[stepTTL]},
 		}
 	}
@@ -140,9 +140,9 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 		answered[stepMode] = true
 	}
 
-	if !s.set["item"] && !s.set["move-from"] && !s.set["move-item"] {
+	if !s.set["item"] && !s.set["from"] && !s.set["from-item"] {
 		render.render(renderBreadcrumb(steps(), stepItems))
-		fmt.Println(lipgloss.NewStyle().Foreground(colorDim).Render("Move items from an existing vault. At least one item is required."))
+		fmt.Println(lipgloss.NewStyle().Foreground(colorDim).Render("Copy items from an existing vault. At least one item is required."))
 
 		vaults, err := onepassword.ListVaults()
 		if err != nil {
@@ -169,9 +169,9 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 		if err != nil {
 			return nil, fmt.Errorf("picking items from %s: %w", sourceVault, err)
 		}
-		s.MoveItems = make([]string, len(picked))
+		s.FromItems = make([]string, len(picked))
 		for i, item := range picked {
-			s.MoveItems[i] = sourceVault + "/" + item.ID
+			s.FromItems[i] = sourceVault + "/" + item.ID
 		}
 		answered[stepItems] = true
 	}
@@ -197,9 +197,9 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 }
 
 func itemsSummary(s *wizardState) string {
-	n := len(s.Items) + len(s.MoveItems)
-	if s.MoveFrom != "" {
-		return "from " + s.MoveFrom
+	n := len(s.Items) + len(s.FromItems)
+	if s.FromVault != "" {
+		return "from " + s.FromVault
 	}
 	if n == 0 {
 		return ""

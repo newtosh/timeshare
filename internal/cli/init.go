@@ -13,21 +13,28 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// moveItem is a seam over onepassword.MoveItem so tests can exercise
-// moveInto's partial-failure/return behavior without shelling out to `op`.
+// moveItem and copyItem are seams over onepassword.MoveItem/CopyItem so
+// tests can exercise transferInto's partial-failure/return behavior
+// without shelling out to `op`.
 var moveItem = onepassword.MoveItem
+var copyItem = onepassword.CopyItem
 
-// moveInto moves each of picked from sourceVault into destVault, printing
-// progress as it goes. It returns alreadyMoved plus every item that moved
-// successfully in THIS call, alongside any error — including on error, so a
-// caller can persist a partial result instead of losing track of what
-// really moved in 1Password before the failure.
-func moveInto(destVault, sourceVault string, picked []onepassword.Item, alreadyMoved []string) ([]string, error) {
+// transferInto copies (or, if move is true, moves) each of picked from
+// sourceVault into destVault, printing progress as it goes. It returns
+// alreadyMoved plus every item transferred successfully in THIS call,
+// alongside any error — including on error, so a caller can persist a
+// partial result instead of losing track of what really happened in
+// 1Password before the failure.
+func transferInto(destVault, sourceVault string, picked []onepassword.Item, alreadyMoved []string, move bool) ([]string, error) {
+	verb, do := "Copying", copyItem
+	if move {
+		verb, do = "Moving", moveItem
+	}
 	items := append([]string{}, alreadyMoved...)
 	for _, item := range picked {
-		fmt.Printf("Moving %q into %q...\n", item.Title, destVault)
-		if err := moveItem(item.ID, sourceVault, destVault); err != nil {
-			return items, fmt.Errorf("moving item %q failed (already moved: %v): %w", item.Title, items, err)
+		fmt.Printf("%s %q into %q...\n", verb, item.Title, destVault)
+		if err := do(item.ID, sourceVault, destVault); err != nil {
+			return items, fmt.Errorf("transferring item %q failed (already done: %v): %w", item.Title, items, err)
 		}
 		items = append(items, item.Title)
 	}
@@ -79,18 +86,18 @@ func runInit(cwd string, s *wizardState) error {
 	}
 
 	items := append([]string{}, s.Items...)
-	if s.MoveFrom != "" {
-		existing, err := onepassword.ListItems(s.MoveFrom)
+	if s.FromVault != "" {
+		existing, err := onepassword.ListItems(s.FromVault)
 		if err != nil {
-			return fmt.Errorf("listing items in %s: %w", s.MoveFrom, err)
+			return fmt.Errorf("listing items in %s: %w", s.FromVault, err)
 		}
-		items, err = moveInto(s.Vault, s.MoveFrom, existing, items)
+		items, err = transferInto(s.Vault, s.FromVault, existing, items, s.Move)
 		if err != nil {
 			return err
 		}
 	}
 
-	for _, spec := range s.MoveItems {
+	for _, spec := range s.FromItems {
 		// Split on the rightmost "/" rather than the first, so a source
 		// vault name that itself contains "/" still parses its item ref
 		// correctly in the vault/item form. A bare vault name for the
@@ -124,10 +131,10 @@ func runInit(cwd string, s *wizardState) error {
 			toMove = picked
 		}
 
-		var moveErr error
-		items, moveErr = moveInto(s.Vault, sourceVault, toMove, items)
-		if moveErr != nil {
-			return moveErr
+		var transferErr error
+		items, transferErr = transferInto(s.Vault, sourceVault, toMove, items, s.Move)
+		if transferErr != nil {
+			return transferErr
 		}
 	}
 
@@ -157,10 +164,11 @@ func newInitCmd() *cobra.Command {
 	var vaultName string
 	var mode string
 	var ttl string
-	var moveFrom string
+	var fromVault string
 	var explicitItems []string
-	var moveItems []string
+	var fromItems []string
 	var force bool
+	var move bool
 	var nonInteractive bool
 
 	cmd := &cobra.Command{
@@ -171,7 +179,7 @@ func newInitCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			s := newWizardState(cmd, vaultName, mode, ttl, moveFrom, explicitItems, moveItems, force)
+			s := newWizardState(cmd, vaultName, mode, ttl, fromVault, explicitItems, fromItems, force, move)
 
 			if nonInteractive {
 				return runInit(cwd, s)
@@ -197,10 +205,11 @@ func newInitCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&vaultName, "vault", "v", "", "name for the new dedicated vault")
 	cmd.Flags().StringVarP(&mode, "mode", "m", string(config.ModeBiometric), "service-account or biometric")
 	cmd.Flags().StringVarP(&ttl, "ttl", "t", "4h", "default cache TTL for this project")
-	cmd.Flags().StringVar(&moveFrom, "move-from", "", "existing vault to move current items out of (optional)")
+	cmd.Flags().StringVar(&fromVault, "from", "", "existing vault to copy current items out of (optional)")
 	cmd.Flags().StringArrayVarP(&explicitItems, "item", "i", nil, "item name to include in .timeshare.yml (repeatable); must already exist in --vault")
-	cmd.Flags().StringArrayVar(&moveItems, "move-item", nil, "move one item from an existing vault: <source-vault>/<item-name-or-id>, or just <source-vault> (no slash) for an interactive picker (repeatable)")
+	cmd.Flags().StringArrayVar(&fromItems, "from-item", nil, "copy one item from an existing vault: <source-vault>/<item-name-or-id>, or just <source-vault> (no slash) for an interactive picker (repeatable)")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "overwrite an existing .timeshare.yml")
+	cmd.Flags().BoolVar(&move, "move", false, "move items out of the source vault instead of copying them (--from/--from-item default to copy, leaving the original in place)")
 	cmd.Flags().BoolVarP(&nonInteractive, "non-interactive", "n", false, "never prompt; validate flags and fail fast on anything incomplete (for scripts/CI)")
 	return cmd
 }

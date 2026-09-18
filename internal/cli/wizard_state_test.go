@@ -12,10 +12,11 @@ func newTestInitFlags() *cobra.Command {
 	cmd.Flags().StringP("vault", "v", "", "")
 	cmd.Flags().StringP("mode", "m", "biometric", "")
 	cmd.Flags().StringP("ttl", "t", "4h", "")
-	cmd.Flags().String("move-from", "", "")
+	cmd.Flags().String("from", "", "")
 	cmd.Flags().StringArrayP("item", "i", nil, "")
-	cmd.Flags().StringArray("move-item", nil, "")
+	cmd.Flags().StringArray("from-item", nil, "")
 	cmd.Flags().BoolP("force", "f", false, "")
+	cmd.Flags().Bool("move", false, "")
 	cmd.Flags().BoolP("non-interactive", "n", false, "")
 	return cmd
 }
@@ -25,7 +26,7 @@ func TestNewWizardStateNoFlagsSet(t *testing.T) {
 	if err := cmd.ParseFlags([]string{}); err != nil {
 		t.Fatal(err)
 	}
-	s := newWizardState(cmd, "", "biometric", "4h", "", nil, nil, false)
+	s := newWizardState(cmd, "", "biometric", "4h", "", nil, nil, false, false)
 	if len(s.set) != 0 {
 		t.Fatalf("expected no flags recorded in set map, got %v", s.set)
 	}
@@ -36,7 +37,7 @@ func TestNewWizardStateSomeFlagsSet(t *testing.T) {
 	if err := cmd.ParseFlags([]string{"--vault=project-x"}); err != nil {
 		t.Fatal(err)
 	}
-	s := newWizardState(cmd, "project-x", "biometric", "4h", "", nil, nil, false)
+	s := newWizardState(cmd, "project-x", "biometric", "4h", "", nil, nil, false, false)
 	if !s.set["vault"] {
 		t.Fatal("expected set[\"vault\"] true")
 	}
@@ -47,12 +48,26 @@ func TestNewWizardStateSomeFlagsSet(t *testing.T) {
 
 func TestNewWizardStateItemFlagsCountAsSet(t *testing.T) {
 	cmd := newTestInitFlags()
-	if err := cmd.ParseFlags([]string{"--move-item=legacy-vault/DATABASE_URL"}); err != nil {
+	if err := cmd.ParseFlags([]string{"--from-item=legacy-vault/DATABASE_URL"}); err != nil {
 		t.Fatal(err)
 	}
-	s := newWizardState(cmd, "", "biometric", "4h", "", nil, []string{"legacy-vault/DATABASE_URL"}, false)
-	if !s.set["move-item"] {
-		t.Fatal("expected set[\"move-item\"] true")
+	s := newWizardState(cmd, "", "biometric", "4h", "", nil, []string{"legacy-vault/DATABASE_URL"}, false, false)
+	if !s.set["from-item"] {
+		t.Fatal("expected set[\"from-item\"] true")
+	}
+}
+
+func TestNewWizardStateMoveFlagNotCountedAsSet(t *testing.T) {
+	cmd := newTestInitFlags()
+	if err := cmd.ParseFlags([]string{"--move"}); err != nil {
+		t.Fatal(err)
+	}
+	s := newWizardState(cmd, "", "biometric", "4h", "", nil, nil, false, true)
+	if s.set["move"] {
+		t.Fatal("expected set[\"move\"] false — --move modifies behavior, not wizard input")
+	}
+	if !s.Move {
+		t.Fatal("expected s.Move true")
 	}
 }
 
@@ -66,7 +81,7 @@ func TestValidateCompleteRejectsMissingVault(t *testing.T) {
 func TestValidateCompleteRejectsNoItemSource(t *testing.T) {
 	s := &wizardState{Vault: "v", TTL: "4h"}
 	if err := s.validateComplete(); err == nil {
-		t.Fatal("expected error when no --item/--move-from/--move-item given")
+		t.Fatal("expected error when no --item/--from/--from-item given")
 	}
 }
 
@@ -77,8 +92,8 @@ func TestValidateCompleteRejectsBadTTL(t *testing.T) {
 	}
 }
 
-func TestValidateCompleteAcceptsMoveFromOnly(t *testing.T) {
-	s := &wizardState{Vault: "v", TTL: "4h", MoveFrom: "legacy"}
+func TestValidateCompleteAcceptsFromVaultOnly(t *testing.T) {
+	s := &wizardState{Vault: "v", TTL: "4h", FromVault: "legacy"}
 	if err := s.validateComplete(); err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}

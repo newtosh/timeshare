@@ -7,28 +7,30 @@ import (
 	"github.com/newtosh/timeshare/internal/onepassword"
 )
 
-// withFakeMoveItem swaps the package-level moveItem seam for a fake that
-// fails once failOnCall is reached (1-indexed call count; 0 never fails),
-// restoring the real onepassword.MoveItem afterward.
-func withFakeMoveItem(t *testing.T, failOnCall int, failErr error) {
+// withFakeTransferItems swaps the package-level moveItem/copyItem seams for
+// fakes that fail once failOnCall is reached (1-indexed call count; 0 never
+// fails), restoring the real onepassword funcs afterward.
+func withFakeTransferItems(t *testing.T, failOnCall int, failErr error) {
 	t.Helper()
 	calls := 0
-	orig := moveItem
-	moveItem = func(itemName, fromVault, toVault string) error {
+	fake := func(itemName, fromVault, toVault string) error {
 		calls++
 		if failOnCall > 0 && calls == failOnCall {
 			return failErr
 		}
 		return nil
 	}
-	t.Cleanup(func() { moveItem = orig })
+	origMove, origCopy := moveItem, copyItem
+	moveItem = fake
+	copyItem = fake
+	t.Cleanup(func() { moveItem, copyItem = origMove, origCopy })
 }
 
-func TestMoveIntoAllSucceed(t *testing.T) {
-	withFakeMoveItem(t, 0, nil)
+func TestTransferIntoAllSucceed(t *testing.T) {
+	withFakeTransferItems(t, 0, nil)
 	picked := []onepassword.Item{{ID: "1", Title: "A"}, {ID: "2", Title: "B"}}
 
-	got, err := moveInto("dest", "src", picked, nil)
+	got, err := transferInto("dest", "src", picked, nil, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -38,31 +40,61 @@ func TestMoveIntoAllSucceed(t *testing.T) {
 	}
 }
 
-func TestMoveIntoPartialFailureReturnsMovedSoFar(t *testing.T) {
+func TestTransferIntoPartialFailureReturnsDoneSoFar(t *testing.T) {
 	boom := fmt.Errorf("boom")
-	withFakeMoveItem(t, 2, boom) // fails on the 2nd item
+	withFakeTransferItems(t, 2, boom) // fails on the 2nd item
 	picked := []onepassword.Item{{ID: "1", Title: "A"}, {ID: "2", Title: "B"}, {ID: "3", Title: "C"}}
 
-	got, err := moveInto("dest", "src", picked, nil)
+	got, err := transferInto("dest", "src", picked, nil, false)
 	if err == nil {
-		t.Fatal("expected an error from the failing 2nd move")
+		t.Fatal("expected an error from the failing 2nd transfer")
 	}
-	// Item A moved before the failure on B; C was never attempted.
+	// Item A transferred before the failure on B; C was never attempted.
 	if len(got) != 1 || got[0] != "A" {
 		t.Fatalf("expected partial result [A], got %v", got)
 	}
 }
 
-func TestMoveIntoPreservesAlreadyMoved(t *testing.T) {
-	withFakeMoveItem(t, 0, nil)
+func TestTransferIntoPreservesAlreadyDone(t *testing.T) {
+	withFakeTransferItems(t, 0, nil)
 	picked := []onepassword.Item{{ID: "2", Title: "B"}}
 
-	got, err := moveInto("dest", "src", picked, []string{"A"})
+	got, err := transferInto("dest", "src", picked, []string{"A"}, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(got) != 2 || got[0] != "A" || got[1] != "B" {
 		t.Fatalf("got %v, want [A B]", got)
+	}
+}
+
+func TestTransferIntoDefaultsToCopyNotMove(t *testing.T) {
+	var usedCopy, usedMove bool
+	origMove, origCopy := moveItem, copyItem
+	moveItem = func(itemName, fromVault, toVault string) error { usedMove = true; return nil }
+	copyItem = func(itemName, fromVault, toVault string) error { usedCopy = true; return nil }
+	t.Cleanup(func() { moveItem, copyItem = origMove, origCopy })
+
+	if _, err := transferInto("dest", "src", []onepassword.Item{{ID: "1", Title: "A"}}, nil, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !usedCopy || usedMove {
+		t.Fatalf("expected default transferInto to copy, not move (usedCopy=%v usedMove=%v)", usedCopy, usedMove)
+	}
+}
+
+func TestTransferIntoMoveTrueUsesMove(t *testing.T) {
+	var usedCopy, usedMove bool
+	origMove, origCopy := moveItem, copyItem
+	moveItem = func(itemName, fromVault, toVault string) error { usedMove = true; return nil }
+	copyItem = func(itemName, fromVault, toVault string) error { usedCopy = true; return nil }
+	t.Cleanup(func() { moveItem, copyItem = origMove, origCopy })
+
+	if _, err := transferInto("dest", "src", []onepassword.Item{{ID: "1", Title: "A"}}, nil, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !usedMove || usedCopy {
+		t.Fatalf("expected move=true to move, not copy (usedCopy=%v usedMove=%v)", usedCopy, usedMove)
 	}
 }
 
