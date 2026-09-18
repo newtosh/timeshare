@@ -15,6 +15,7 @@ func newTestInitFlags() *cobra.Command {
 	cmd.Flags().String("from", "", "")
 	cmd.Flags().StringArrayP("item", "i", nil, "")
 	cmd.Flags().StringArray("from-item", nil, "")
+	cmd.Flags().StringArray("ssh-key", nil, "")
 	cmd.Flags().BoolP("force", "f", false, "")
 	cmd.Flags().Bool("move", false, "")
 	cmd.Flags().BoolP("non-interactive", "n", false, "")
@@ -26,7 +27,7 @@ func TestNewWizardStateNoFlagsSet(t *testing.T) {
 	if err := cmd.ParseFlags([]string{}); err != nil {
 		t.Fatal(err)
 	}
-	s := newWizardState(cmd, "", "biometric", "4h", "", nil, nil, false, false)
+	s := newWizardState(cmd, "", "biometric", "4h", "", nil, nil, nil, false, false)
 	if len(s.set) != 0 {
 		t.Fatalf("expected no flags recorded in set map, got %v", s.set)
 	}
@@ -37,7 +38,7 @@ func TestNewWizardStateSomeFlagsSet(t *testing.T) {
 	if err := cmd.ParseFlags([]string{"--vault=project-x"}); err != nil {
 		t.Fatal(err)
 	}
-	s := newWizardState(cmd, "project-x", "biometric", "4h", "", nil, nil, false, false)
+	s := newWizardState(cmd, "project-x", "biometric", "4h", "", nil, nil, nil, false, false)
 	if !s.set["vault"] {
 		t.Fatal("expected set[\"vault\"] true")
 	}
@@ -51,7 +52,7 @@ func TestNewWizardStateItemFlagsCountAsSet(t *testing.T) {
 	if err := cmd.ParseFlags([]string{"--from-item=legacy-vault/DATABASE_URL"}); err != nil {
 		t.Fatal(err)
 	}
-	s := newWizardState(cmd, "", "biometric", "4h", "", nil, []string{"legacy-vault/DATABASE_URL"}, false, false)
+	s := newWizardState(cmd, "", "biometric", "4h", "", nil, []string{"legacy-vault/DATABASE_URL"}, nil, false, false)
 	if !s.set["from-item"] {
 		t.Fatal("expected set[\"from-item\"] true")
 	}
@@ -62,12 +63,26 @@ func TestNewWizardStateMoveFlagNotCountedAsSet(t *testing.T) {
 	if err := cmd.ParseFlags([]string{"--move"}); err != nil {
 		t.Fatal(err)
 	}
-	s := newWizardState(cmd, "", "biometric", "4h", "", nil, nil, false, true)
+	s := newWizardState(cmd, "", "biometric", "4h", "", nil, nil, nil, false, true)
 	if s.set["move"] {
 		t.Fatal("expected set[\"move\"] false — --move modifies behavior, not wizard input")
 	}
 	if !s.Move {
 		t.Fatal("expected s.Move true")
+	}
+}
+
+func TestNewWizardStateSSHKeyFlagCountsAsSet(t *testing.T) {
+	cmd := newTestInitFlags()
+	if err := cmd.ParseFlags([]string{"--ssh-key=Private/deploy-key-prod"}); err != nil {
+		t.Fatal(err)
+	}
+	s := newWizardState(cmd, "", "biometric", "4h", "", nil, nil, []string{"Private/deploy-key-prod"}, false, false)
+	if !s.set["ssh-key"] {
+		t.Fatal("expected set[\"ssh-key\"] true")
+	}
+	if len(s.SSHKeys) != 1 || s.SSHKeys[0] != "Private/deploy-key-prod" {
+		t.Fatalf("SSHKeys = %v", s.SSHKeys)
 	}
 }
 

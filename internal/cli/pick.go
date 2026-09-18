@@ -41,6 +41,34 @@ func pickItems(sourceVault string, vaultItems []onepassword.Item, requireOne boo
 	return selected, nil
 }
 
+// pickSSHKeys shows an fzf-style, always-filtering multi-select over
+// sshItems (SSH Key category items already filtered by the caller) and
+// returns the ones the user selected. Selecting none is valid — unlike
+// pickItems, SSH key access is optional.
+func pickSSHKeys(vault string, sshItems []onepassword.Item) ([]onepassword.Item, error) {
+	if len(sshItems) == 0 {
+		return nil, nil
+	}
+
+	byID := make(map[string]onepassword.Item, len(sshItems))
+	items := make([]fzfItem, len(sshItems))
+	for i, it := range sshItems {
+		byID[it.ID] = it
+		items[i] = fzfItem{Label: fmt.Sprintf("%s (%s)", it.Title, it.ID), Value: it.ID}
+	}
+
+	chosen, err := runFzfList(fmt.Sprintf("Select SSH keys to grant access to from %q", vault), items, true, false)
+	if err != nil {
+		return nil, fmt.Errorf("SSH key picker: %w", err)
+	}
+
+	selected := make([]onepassword.Item, len(chosen))
+	for i, it := range chosen {
+		selected[i] = byID[it.Value]
+	}
+	return selected, nil
+}
+
 // pickVault shows an fzf-style, always-filtering select over vaults and
 // returns the chosen vault's ID — stable even if names aren't unique, and
 // op accepts an ID anywhere it accepts a name.

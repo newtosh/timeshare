@@ -21,6 +21,7 @@ type wizardState struct {
 	FromVault string
 	Items     []string
 	FromItems []string
+	SSHKeys   []string
 	Force     bool
 	Move      bool
 
@@ -31,9 +32,9 @@ type wizardState struct {
 // something" for entry-mode dispatch. --force, --move and
 // --non-interactive are deliberately excluded — they modify behavior, not
 // wizard input.
-var wizardFlagNames = []string{"vault", "mode", "ttl", "item", "from", "from-item"}
+var wizardFlagNames = []string{"vault", "mode", "ttl", "item", "from", "from-item", "ssh-key"}
 
-func newWizardState(cmd *cobra.Command, vault, mode, ttl, fromVault string, items, fromItems []string, force, move bool) *wizardState {
+func newWizardState(cmd *cobra.Command, vault, mode, ttl, fromVault string, items, fromItems, sshKeys []string, force, move bool) *wizardState {
 	s := &wizardState{
 		Vault:     vault,
 		Mode:      mode,
@@ -41,6 +42,7 @@ func newWizardState(cmd *cobra.Command, vault, mode, ttl, fromVault string, item
 		FromVault: fromVault,
 		Items:     items,
 		FromItems: fromItems,
+		SSHKeys:   sshKeys,
 		Force:     force,
 		Move:      move,
 		set:       make(map[string]bool),
