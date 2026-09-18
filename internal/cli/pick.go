@@ -14,8 +14,31 @@ import (
 // when true, the picker itself blocks enter until at least one item is
 // checked, so this never returns an empty slice on success.
 func pickItems(sourceVault string, vaultItems []onepassword.Item, requireOne bool) ([]onepassword.Item, error) {
+	return pickMulti(sourceVault, vaultItems, requireOne,
+		fmt.Sprintf("Select items to move from %q", sourceVault),
+		"item picker",
+		true,  // print "skipping" on empty selection
+		false, // empty vaultItems is an error
+	)
+}
+
+// pickSSHKeys is pickItems for optional SSH Key selections: empty vault
+// list and empty selection are both valid (no keys to grant / skip).
+func pickSSHKeys(vault string, sshItems []onepassword.Item) ([]onepassword.Item, error) {
+	return pickMulti(vault, sshItems, false,
+		fmt.Sprintf("Select SSH keys to grant access to from %q", vault),
+		"SSH key picker",
+		false, // silent empty selection
+		true,  // empty list → nil, nil
+	)
+}
+
+func pickMulti(vault string, vaultItems []onepassword.Item, requireOne bool, title, errLabel string, announceSkip, emptyOK bool) ([]onepassword.Item, error) {
 	if len(vaultItems) == 0 {
-		return nil, fmt.Errorf("vault %q has no items to pick from", sourceVault)
+		if emptyOK {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("vault %q has no items to pick from", vault)
 	}
 
 	byID := make(map[string]onepassword.Item, len(vaultItems))
@@ -25,13 +48,13 @@ func pickItems(sourceVault string, vaultItems []onepassword.Item, requireOne boo
 		items[i] = fzfItem{Label: fmt.Sprintf("%s (%s)", it.Title, it.ID), Value: it.ID}
 	}
 
-	chosen, err := runFzfList(fmt.Sprintf("Select items to move from %q", sourceVault), items, true, requireOne)
+	chosen, err := runFzfList(title, items, true, requireOne)
 	if err != nil {
-		return nil, fmt.Errorf("item picker: %w", err)
+		return nil, fmt.Errorf("%s: %w", errLabel, err)
 	}
 
-	if len(chosen) == 0 {
-		fmt.Printf("No items selected from %q, skipping.\n", sourceVault)
+	if announceSkip && len(chosen) == 0 {
+		fmt.Printf("No items selected from %q, skipping.\n", vault)
 	}
 
 	selected := make([]onepassword.Item, len(chosen))

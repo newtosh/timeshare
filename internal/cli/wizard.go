@@ -15,22 +15,25 @@ const (
 	stepVault = iota
 	stepMode
 	stepItems
+	stepSSHKeys
 	stepTTL
 	stepCount
 )
 
 var wizardStepLabels = [stepCount]string{
-	stepVault: "Repo vault name",
-	stepMode:  "Auth mode",
-	stepItems: "Items to move",
-	stepTTL:   "TTL",
+	stepVault:   "Repo vault name",
+	stepMode:    "Auth mode",
+	stepItems:   "Items to move",
+	stepSSHKeys: "SSH keys",
+	stepTTL:     "TTL",
 }
 
 var wizardStepHelp = [stepCount]string{
-	stepVault: "The name of a new, dedicated 1Password vault timeshare will create for this repo. Pick something specific to this repo — it shouldn't be shared with unrelated projects.",
-	stepMode:  "Biometric: shells out to `op read`, same Touch ID/Windows Hello prompt you already get, cached for the TTL. Service account: headless, token-based, no prompts at all, but requires a manual token-store step after init (see the printed instructions).",
-	stepItems: "Which 1Password items should this project's allow-list include. You can move items from an existing vault, or pick from a list interactively.",
-	stepTTL:   "How long a resolved secret stays cached before the next read re-checks 1Password. Longer means fewer prompts but a longer window before a rotated/revoked secret takes effect.",
+	stepVault:   "The name of a new, dedicated 1Password vault timeshare will create for this repo. Pick something specific to this repo — it shouldn't be shared with unrelated projects.",
+	stepMode:    "Biometric: shells out to `op read`, same Touch ID/Windows Hello prompt you already get, cached for the TTL. Service account: headless, token-based, no prompts at all, but requires a manual token-store step after init (see the printed instructions).",
+	stepItems:   "Which 1Password items should this project's allow-list include. You can move items from an existing vault, or pick from a list interactively.",
+	stepSSHKeys: "Optional: which SSH keys (already stored in 1Password) this repo's `timeshare run` may use, time-boxed by the same TTL as everything else. Keys are never moved or copied — this only records a reference to wherever they already live.",
+	stepTTL:     "How long a resolved secret stays cached before the next read re-checks 1Password. Longer means fewer prompts but a longer window before a rotated/revoked secret takes effect.",
 }
 
 // breadcrumbRenderer redraws the wizard's breadcrumb line in place: each
@@ -82,7 +85,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	s := &wizardState{
 		Vault: seeded.Vault, Mode: seeded.Mode, TTL: seeded.TTL,
 		FromVault: seeded.FromVault, Items: seeded.Items, FromItems: seeded.FromItems,
-		Force: seeded.Force, set: seeded.set,
+		SSHKeys: seeded.SSHKeys, Force: seeded.Force, set: seeded.set,
 	}
 
 	// answered tracks which steps this wizard RUN has actively prompted
@@ -98,6 +101,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 			{Label: wizardStepLabels[stepVault], Value: s.Vault, Done: s.set["vault"] || answered[stepVault]},
 			{Label: wizardStepLabels[stepMode], Value: s.Mode, Done: s.set["mode"] || answered[stepMode]},
 			{Label: wizardStepLabels[stepItems], Value: itemsSummary(s), Done: s.set["item"] || s.set["from"] || s.set["from-item"] || answered[stepItems]},
+			{Label: wizardStepLabels[stepSSHKeys], Value: sshKeysSummary(s), Done: s.set["ssh-key"] || answered[stepSSHKeys]},
 			{Label: wizardStepLabels[stepTTL], Value: s.TTL, Done: s.set["ttl"] || answered[stepTTL]},
 		}
 	}
@@ -176,6 +180,35 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 		answered[stepItems] = true
 	}
 
+	if !s.set["ssh-key"] {
+		render.render(renderBreadcrumb(steps(), stepSSHKeys))
+		fmt.Println(lipgloss.NewStyle().Foreground(colorDim).Render("Optionally grant this repo access to SSH keys already stored in 1Password. Select none and press enter to skip."))
+
+		vaults, err := onepassword.ListVaults()
+		if err != nil {
+			return nil, fmt.Errorf("listing vaults: %w", err)
+		}
+		sourceVault, err := pickVault(vaults)
+		if err != nil {
+			return nil, err
+		}
+
+		sshItems, err := onepassword.ListSSHKeyItems(sourceVault)
+		if err != nil {
+			return nil, fmt.Errorf("listing SSH keys in %s: %w", sourceVault, err)
+		}
+
+		picked, err := pickSSHKeys(sourceVault, sshItems)
+		if err != nil {
+			return nil, err
+		}
+		s.SSHKeys = make([]string, len(picked))
+		for i, item := range picked {
+			s.SSHKeys[i] = sourceVault + "/" + item.ID
+		}
+		answered[stepSSHKeys] = true
+	}
+
 	if !s.set["ttl"] {
 		render.render(renderBreadcrumb(steps(), stepTTL))
 		val, err := promptWithHelp(stepTTL, func() (string, error) {
@@ -197,12 +230,19 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 }
 
 func itemsSummary(s *wizardState) string {
-	n := len(s.Items) + len(s.FromItems)
 	if s.FromVault != "" {
 		return "from " + s.FromVault
 	}
+	return selectedCount(len(s.Items)+len(s.FromItems), "")
+}
+
+func sshKeysSummary(s *wizardState) string {
+	return selectedCount(len(s.SSHKeys), "none")
+}
+
+func selectedCount(n int, empty string) string {
 	if n == 0 {
-		return ""
+		return empty
 	}
 	return fmt.Sprintf("%d selected", n)
 }

@@ -16,17 +16,19 @@ const (
 )
 
 type Config struct {
-	Vault string        `yaml:"vault"`
-	Mode  Mode          `yaml:"mode"`
-	TTL   time.Duration `yaml:"ttl"`
-	Items []string      `yaml:"items"`
+	Vault   string        `yaml:"vault"`
+	Mode    Mode          `yaml:"mode"`
+	TTL     time.Duration `yaml:"ttl"`
+	Items   []string      `yaml:"items"`
+	SSHKeys []string      `yaml:"ssh_keys,omitempty"`
 }
 
 type rawConfig struct {
-	Vault string   `yaml:"vault"`
-	Mode  string   `yaml:"mode"`
-	TTL   string   `yaml:"ttl"`
-	Items []string `yaml:"items"`
+	Vault   string   `yaml:"vault"`
+	Mode    string   `yaml:"mode"`
+	TTL     string   `yaml:"ttl"`
+	Items   []string `yaml:"items"`
+	SSHKeys []string `yaml:"ssh_keys,omitempty"`
 }
 
 // Load reads and validates a .timeshare.yml file at path.
@@ -59,7 +61,7 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("config must list at least one item under items")
 	}
 
-	return Config{Vault: raw.Vault, Mode: mode, TTL: ttl, Items: raw.Items}, nil
+	return Config{Vault: raw.Vault, Mode: mode, TTL: ttl, Items: raw.Items, SSHKeys: raw.SSHKeys}, nil
 }
 
 // Write marshals cfg to path as YAML, symmetric with Load. Uses the real
@@ -68,10 +70,11 @@ func Load(path string) (Config, error) {
 // literal whitespace, anything — round-trip correctly.
 func Write(path string, cfg Config) error {
 	raw := rawConfig{
-		Vault: cfg.Vault,
-		Mode:  string(cfg.Mode),
-		TTL:   cfg.TTL.String(),
-		Items: cfg.Items,
+		Vault:   cfg.Vault,
+		Mode:    string(cfg.Mode),
+		TTL:     cfg.TTL.String(),
+		Items:   cfg.Items,
+		SSHKeys: cfg.SSHKeys,
 	}
 	data, err := yaml.Marshal(raw)
 	if err != nil {

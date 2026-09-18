@@ -2,10 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 
 	"github.com/newtosh/timeshare/internal/client"
+	"github.com/newtosh/timeshare/internal/config"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -38,16 +40,36 @@ func newDoctorCmd() *cobra.Command {
 			}) {
 				failed++
 			}
+
+			var cfg config.Config
 			if !check(".timeshare.yml found", func() error {
 				cwd, err := os.Getwd()
 				if err != nil {
 					return err
 				}
-				_, _, err = LoadProjectContext(cwd)
+				loaded, _, err := LoadProjectContext(cwd)
+				cfg = loaded
 				return err
 			}) {
 				failed++
 			}
+
+			if len(cfg.SSHKeys) > 0 {
+				if !check("SSH agent reachable (needed for ssh_keys)", func() error {
+					path := upstreamAgentSocketPath()
+					if path == "" {
+						return fmt.Errorf("could not determine upstream SSH agent socket path")
+					}
+					conn, err := net.Dial("unix", path)
+					if err != nil {
+						return err
+					}
+					return conn.Close()
+				}) {
+					failed++
+				}
+			}
+
 			if failed > 0 {
 				return fmt.Errorf("%d check(s) failed", failed)
 			}
