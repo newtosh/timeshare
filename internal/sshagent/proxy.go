@@ -8,6 +8,8 @@ package sshagent
 
 import (
 	"errors"
+	"fmt"
+	"log"
 	"net"
 	"time"
 
@@ -76,8 +78,9 @@ func (p *Proxy) Sign(key ssh.PublicKey, data []byte) (*ssh.Signature, error) {
 	if !time.Now().Before(p.deadline) {
 		return nil, errors.New("timeshare: SSH key grant TTL expired")
 	}
-	if !p.allowed[ssh.FingerprintSHA256(key)] {
-		return nil, errors.New("timeshare: SSH key not in this repo's allow-list")
+	fingerprint := ssh.FingerprintSHA256(key)
+	if !p.allowed[fingerprint] {
+		return nil, fmt.Errorf("timeshare: SSH key %s not in this repo's allow-list", fingerprint)
 	}
 	return p.upstream.Sign(key, data)
 }
@@ -90,8 +93,9 @@ func (p *Proxy) SignWithFlags(key ssh.PublicKey, data []byte, flags agent.Signat
 	if !time.Now().Before(p.deadline) {
 		return nil, errors.New("timeshare: SSH key grant TTL expired")
 	}
-	if !p.allowed[ssh.FingerprintSHA256(key)] {
-		return nil, errors.New("timeshare: SSH key not in this repo's allow-list")
+	fingerprint := ssh.FingerprintSHA256(key)
+	if !p.allowed[fingerprint] {
+		return nil, fmt.Errorf("timeshare: SSH key %s not in this repo's allow-list", fingerprint)
 	}
 	return p.upstream.SignWithFlags(key, data, flags)
 }
@@ -122,6 +126,7 @@ func Serve(l net.Listener, p *Proxy) error {
 		go func() {
 			defer func() { _ = conn.Close() }()
 			if err := peercred.Verify(conn); err != nil {
+				log.Printf("sshagent: rejecting connection: %v", err)
 				return
 			}
 			_ = agent.ServeAgent(p, conn)

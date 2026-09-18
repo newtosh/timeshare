@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/newtosh/timeshare/internal/onepassword"
 )
 
 func TestResolveFingerprintsRejectsMissingSlash(t *testing.T) {
@@ -35,10 +37,16 @@ func TestResolveFingerprintsSplitsOnRightmostSlash(t *testing.T) {
 }
 
 func TestResolveFingerprintsPropagatesError(t *testing.T) {
-	orig := getItemFingerprint
-	defer func() { getItemFingerprint = orig }()
+	origFingerprint, origList := getItemFingerprint, listItems
+	defer func() {
+		getItemFingerprint = origFingerprint
+		listItems = origList
+	}()
 	getItemFingerprint = func(vault, ref string) (string, error) {
 		return "", fmt.Errorf("boom")
+	}
+	listItems = func(vault string) ([]onepassword.Item, error) {
+		return nil, fmt.Errorf("listing unavailable")
 	}
 
 	_, err := ResolveFingerprints([]string{"Private/deploy-key-prod"})

@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,11 +60,13 @@ func TestListFiltersToAllowedFingerprint(t *testing.T) {
 func TestSignRejectsNonAllowedKey(t *testing.T) {
 	upstream := newUpstream()
 	_, allowedFP := addKey(t, upstream)
-	otherPub, _ := addKey(t, upstream)
+	otherPub, otherFP := addKey(t, upstream)
 
 	p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(time.Hour))
 	if _, err := p.Sign(otherPub, []byte("data")); err == nil {
 		t.Fatal("expected error signing with a non-allow-listed key")
+	} else if !strings.Contains(err.Error(), otherFP) {
+		t.Fatalf("rejection error %q does not name fingerprint %q", err, otherFP)
 	}
 }
 
@@ -121,11 +124,13 @@ func TestUnsupportedMethodsReturnError(t *testing.T) {
 func TestSignWithFlagsRejectsNonAllowedKey(t *testing.T) {
 	upstream := newUpstream()
 	_, allowedFP := addKey(t, upstream)
-	otherPub, _ := addKey(t, upstream)
+	otherPub, otherFP := addKey(t, upstream)
 
 	p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(time.Hour))
 	if _, err := p.SignWithFlags(otherPub, []byte("data"), agent.SignatureFlagRsaSha256); err == nil {
 		t.Fatal("expected error signing with a non-allow-listed key")
+	} else if !strings.Contains(err.Error(), otherFP) {
+		t.Fatalf("rejection error %q does not name fingerprint %q", err, otherFP)
 	}
 }
 

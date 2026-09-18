@@ -12,6 +12,10 @@ import (
 // behavior without shelling out to `op`.
 var getItemFingerprint = onepassword.GetItemFingerprint
 
+// listItems is a seam over onepassword.ListItems so unit tests that exercise
+// resolution errors don't invoke the real `op` CLI while building suggestions.
+var listItems = onepassword.ListItems
+
 // ResolveFingerprints resolves each ref — a "<vault>/<item-title-or-id>"
 // string, the same split-on-rightmost-"/" syntax timeshare's --from-item
 // flag already uses — to that item's SSH key fingerprint, in order.
@@ -39,7 +43,7 @@ func ResolveFingerprints(refs []string) ([]string, error) {
 // or "" if the vault itself can't be listed (the caller already has a
 // real error to report) or nothing close matches.
 func suggestionText(vault, item string) string {
-	items, err := onepassword.ListItems(vault)
+	items, err := listItems(vault)
 	if err != nil {
 		return ""
 	}

@@ -210,7 +210,7 @@ func newInitCmd() *cobra.Command {
 	cmd.Flags().StringVar(&fromVault, "from", "", "existing vault to copy current items out of (optional)")
 	cmd.Flags().StringArrayVarP(&explicitItems, "item", "i", nil, "item name to include in .timeshare.yml (repeatable); must already exist in --vault")
 	cmd.Flags().StringArrayVar(&fromItems, "from-item", nil, "copy one item from an existing vault: <source-vault>/<item-name-or-id>, or just <source-vault> (no slash) for an interactive picker (repeatable)")
-	cmd.Flags().StringArrayVar(&sshKeys, "ssh-key", nil, "grant this repo's `run` access to an SSH key already stored in 1Password: <vault>/<item-name-or-id> (repeatable)")
+	cmd.Flags().StringArrayVar(&sshKeys, "ssh-key", nil, "grant this repo's run access to an SSH key already stored in 1Password: <vault>/<item-name-or-id> (repeatable)")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "overwrite an existing .timeshare.yml")
 	cmd.Flags().BoolVar(&move, "move", false, "move items out of the source vault instead of copying them (--from/--from-item default to copy, leaving the original in place)")
 	cmd.Flags().BoolVarP(&nonInteractive, "non-interactive", "n", false, "never prompt; validate flags and fail fast on anything incomplete (for scripts/CI)")
