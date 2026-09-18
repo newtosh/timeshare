@@ -6,10 +6,30 @@ set -eu
 MODULE="github.com/newtosh/timeshare"
 MIN_GO_VERSION="1.27.1"
 
-info()  { printf '\033[1;34m==>\033[0m %s\n' "$1"; }
-hint()  { printf '\033[1;36m->\033[0m %s\n' "$1"; }
-warn()  { printf '\033[1;33m!!\033[0m %s\n' "$1"; }
-fail()  { printf '\033[1;31mxx\033[0m %s\n' "$1" >&2; exit 1; }
+# Color variables default to empty (plain text) and are only populated
+# with real ANSI codes when stdout is a real terminal — same convention
+# used by bun/starship/rustup's own installers. Without this, piping
+# install.sh's output to a file or CI log captures raw escape-code
+# garbage instead of degrading to plain text.
+Blue='' Cyan='' Yellow='' Red='' Reset=''
+if [ -t 1 ]; then
+	Blue='\033[1;34m'
+	Cyan='\033[1;36m'
+	Yellow='\033[1;33m'
+	Red='\033[1;31m'
+	Reset='\033[0m'
+fi
+
+# %b (not embedding the color vars directly in the format string) for two
+# reasons: it expands the \033 escape within an argument the way %s never
+# would, and it keeps the format string a fixed literal that never starts
+# with the color var's expansion — when colors are disabled (empty), a
+# format string starting with "->" gets parsed by printf as an option flag
+# ("invalid option"), not literal text. %b sidesteps both problems.
+info()  { printf '%b%s%b %s\n' "$Blue" "==>" "$Reset" "$1"; }
+hint()  { printf '%b%s%b %s\n' "$Cyan" "->" "$Reset" "$1"; }
+warn()  { printf '%b%s%b %s\n' "$Yellow" "!!" "$Reset" "$1"; }
+fail()  { printf '%b%s%b %s\n' "$Red" "xx" "$Reset" "$1" >&2; exit 1; }
 
 # with_spinner LABEL CMD...: runs CMD in the background with a spinner next
 # to LABEL while stdout is a real terminal; otherwise just prints LABEL and
@@ -36,13 +56,13 @@ with_spinner() {
 		case $((i % 4)) in
 		0) frame='|' ;; 1) frame='/' ;; 2) frame='-' ;; *) frame='\' ;;
 		esac
-		printf '\r\033[1;34m==>\033[0m %s %s' "$label" "$frame"
+		printf '\r%b%s%b %s %s' "$Blue" "==>" "$Reset" "$label" "$frame"
 		i=$((i + 1))
 		sleep 0.15
 	done
 	status=0
 	wait "$cmd_pid" || status=$?
-	printf '\r\033[1;34m==>\033[0m %s   \n' "$label"
+	printf '\r%b%s%b %s   \n' "$Blue" "==>" "$Reset" "$label"
 	[ -s "$log" ] && cat "$log"
 	rm -f "$log"
 	return "$status"
