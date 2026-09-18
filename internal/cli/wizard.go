@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/newtosh/timeshare/internal/config"
 	"github.com/newtosh/timeshare/internal/onepassword"
@@ -32,24 +33,18 @@ var wizardStepHelp = [stepCount]string{
 	stepTTL:   "How long a resolved secret stays cached before the next read re-checks 1Password. Longer means fewer prompts but a longer window before a rotated/revoked secret takes effect.",
 }
 
-// stepBlockRenderer redraws the wizard's step block in place: each call
-// clears the previous render (cursor up + clear-to-end) before printing the
-// next one, instead of letting every step's block scroll past on its own.
-type stepBlockRenderer struct{ lines int }
+// breadcrumbRenderer redraws the wizard's breadcrumb line in place: each
+// call clears the previous render before printing the next one, instead of
+// letting every step's breadcrumb scroll past on its own.
+type breadcrumbRenderer struct{ lines int }
 
-func (r *stepBlockRenderer) render(block string) {
+func (r *breadcrumbRenderer) render(line string) {
 	if r.lines > 0 {
-		// Reset SGR (colors) before erasing: \033[J fills the erased region
-		// using whatever background color is currently active, so without
-		// an explicit reset first, our column backgrounds can leak forward
-		// into terminal state that huh's own widgets (filter text, prompts)
-		// render on top of next — making that text unreadable against a
-		// leftover background instead of the terminal's real default.
 		fmt.Printf("\033[0m\033[%dA\033[J", r.lines)
 	}
-	fmt.Print(block)
+	fmt.Print(line + "\n")
 	fmt.Print("\033[0m")
-	r.lines = strings.Count(block, "\n")
+	r.lines = strings.Count(line, "\n") + 1
 }
 
 // isHelpRequest reports whether a raw prompt input was a bare "?" (possibly
@@ -76,7 +71,13 @@ func promptWithHelp(step int, prompt func() (string, error)) (string, error) {
 // runWizard walks the vault/mode/items/ttl steps, skipping any step whose
 // value was already seeded from a flag (seeded.set[...] true), and returns
 // the completed state. It does not call runInit — the caller (newInitCmd's
-// RunE, Task 8) does that once the wizard returns.
+// RunE) does that once the wizard returns.
+//
+// Layout: a horizontal breadcrumb (renderBreadcrumb) stays pinned above
+// whatever the active step needs — a plain prompt for a text/select step,
+// or the full-width fzf-style picker (pickVault/pickItems) for a list step.
+// There's no permanent split pane: the picker gets the whole terminal width
+// since that's what it needs, matching fzf's own layout.
 func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	s := &wizardState{
 		Vault: seeded.Vault, Mode: seeded.Mode, TTL: seeded.TTL,
@@ -90,7 +91,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	// to "biometric" even with zero flags passed). Every step's Done
 	// below uses the same rule: seeded-via-flag, or answered just now.
 	var answered [stepCount]bool
-	render := &stepBlockRenderer{}
+	render := &breadcrumbRenderer{}
 
 	steps := func() []wizardStep {
 		return []wizardStep{
@@ -102,13 +103,13 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	}
 
 	if !s.set["vault"] {
-		render.render(renderStepBlock(steps(), stepVault, "Repo vault name:") + "\n")
+		render.render(renderBreadcrumb(steps(), stepVault))
 		val, err := promptWithHelp(stepVault, func() (string, error) {
 			v := s.Vault
 			if v == "" {
 				v = defaultVaultName(cwd)
 			}
-			err := huh.NewInput().Title("Repo vault name").Value(&v).Run()
+			err := huh.NewInput().Title("Repo vault name").Value(&v).WithTheme(wizardTheme()).Run()
 			return v, err
 		})
 		if err != nil {
@@ -119,7 +120,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	}
 
 	if !s.set["mode"] {
-		render.render(renderStepBlock(steps(), stepMode, "Auth mode:") + "\n")
+		render.render(renderBreadcrumb(steps(), stepMode))
 		mode := s.Mode
 		if mode == "" {
 			mode = string(config.ModeBiometric)
@@ -131,6 +132,7 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 				huh.NewOption("Service account", string(config.ModeServiceAccount)),
 			).
 			Value(&mode).
+			WithTheme(wizardTheme()).
 			Run(); err != nil {
 			return nil, err
 		}
@@ -139,7 +141,8 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	}
 
 	if !s.set["item"] && !s.set["move-from"] && !s.set["move-item"] {
-		render.render(renderStepBlock(steps(), stepItems, "Existing vault to pick items from:\n\nMove items from an existing vault. At least one\nitem is required — a config with an empty\nitems list will never load.") + "\n")
+		render.render(renderBreadcrumb(steps(), stepItems))
+		fmt.Println(lipgloss.NewStyle().Foreground(colorDim).Render("Move items from an existing vault. At least one item is required."))
 
 		vaults, err := onepassword.ListVaults()
 		if err != nil {
@@ -175,13 +178,13 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 	}
 
 	if !s.set["ttl"] {
-		render.render(renderStepBlock(steps(), stepTTL, "Default cache TTL:") + "\n")
+		render.render(renderBreadcrumb(steps(), stepTTL))
 		val, err := promptWithHelp(stepTTL, func() (string, error) {
 			ttl := s.TTL
 			if ttl == "" {
 				ttl = "4h"
 			}
-			err := huh.NewInput().Title("Default cache TTL").Value(&ttl).Run()
+			err := huh.NewInput().Title("Default cache TTL").Value(&ttl).WithTheme(wizardTheme()).Run()
 			return ttl, err
 		})
 		if err != nil {
