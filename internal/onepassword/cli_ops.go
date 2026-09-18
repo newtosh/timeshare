@@ -123,7 +123,22 @@ type Item struct {
 }
 
 func ListItems(vault string) ([]Item, error) {
-	out, err := runOp("item", "list", "--vault="+vault, "--format=json")
+	return listItems(vault, "")
+}
+
+// ListSSHKeyItems lists only SSH Key category items in vault — the
+// source list for the init wizard's SSH-key picker.
+func ListSSHKeyItems(vault string) ([]Item, error) {
+	return listItems(vault, "SSH Key")
+}
+
+func listItems(vault, category string) ([]Item, error) {
+	args := []string{"item", "list", "--vault=" + vault}
+	if category != "" {
+		args = append(args, "--categories="+category)
+	}
+	args = append(args, "--format=json")
+	out, err := runOp(args...)
 	if err != nil {
 		return nil, err
 	}
@@ -178,25 +193,4 @@ func GetItemFingerprint(vault, ref string) (string, error) {
 		return "", fmt.Errorf("item %q in vault %q has no fingerprint field (not an SSH Key item?)", ref, vault)
 	}
 	return raw.Value, nil
-}
-
-// ListSSHKeyItems lists only SSH Key category items in vault — the
-// source list for the init wizard's SSH-key picker.
-func ListSSHKeyItems(vault string) ([]Item, error) {
-	out, err := runOp("item", "list", "--vault="+vault, "--categories=SSH Key", "--format=json")
-	if err != nil {
-		return nil, err
-	}
-	var raw []struct {
-		ID    string `json:"id"`
-		Title string `json:"title"`
-	}
-	if err := json.Unmarshal(out, &raw); err != nil {
-		return nil, fmt.Errorf("parsing op item list output: %w", err)
-	}
-	items := make([]Item, len(raw))
-	for i, it := range raw {
-		items[i] = Item{ID: it.ID, Title: it.Title}
-	}
-	return items, nil
 }

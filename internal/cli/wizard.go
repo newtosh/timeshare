@@ -230,19 +230,19 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 }
 
 func itemsSummary(s *wizardState) string {
-	n := len(s.Items) + len(s.FromItems)
 	if s.FromVault != "" {
 		return "from " + s.FromVault
 	}
-	if n == 0 {
-		return ""
-	}
-	return fmt.Sprintf("%d selected", n)
+	return selectedCount(len(s.Items)+len(s.FromItems), "")
 }
 
 func sshKeysSummary(s *wizardState) string {
-	if len(s.SSHKeys) == 0 {
-		return "none"
+	return selectedCount(len(s.SSHKeys), "none")
+}
+
+func selectedCount(n int, empty string) string {
+	if n == 0 {
+		return empty
 	}
-	return fmt.Sprintf("%d selected", len(s.SSHKeys))
+	return fmt.Sprintf("%d selected", n)
 }

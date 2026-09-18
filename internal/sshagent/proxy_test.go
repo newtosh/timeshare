@@ -39,6 +39,17 @@ func addKey(t *testing.T, kr agent.Agent) (ssh.PublicKey, string) {
 	return sshPub, ssh.FingerprintSHA256(sshPub)
 }
 
+type signFn func(p *Proxy, key ssh.PublicKey) (*ssh.Signature, error)
+
+func signPlain(p *Proxy, key ssh.PublicKey) (*ssh.Signature, error) {
+	return p.Sign(key, []byte("data"))
+}
+
+func signWithFlags(p *Proxy, key ssh.PublicKey) (*ssh.Signature, error) {
+	// flags 0: ed25519 has no algorithm choice; this only exercises Proxy guards.
+	return p.SignWithFlags(key, []byte("data"), 0)
+}
+
 func TestListFiltersToAllowedFingerprint(t *testing.T) {
 	upstream := newUpstream()
 	_, allowedFP := addKey(t, upstream)
@@ -57,40 +68,45 @@ func TestListFiltersToAllowedFingerprint(t *testing.T) {
 	}
 }
 
-func TestSignRejectsNonAllowedKey(t *testing.T) {
-	upstream := newUpstream()
-	_, allowedFP := addKey(t, upstream)
-	otherPub, otherFP := addKey(t, upstream)
-
-	p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(time.Hour))
-	if _, err := p.Sign(otherPub, []byte("data")); err == nil {
-		t.Fatal("expected error signing with a non-allow-listed key")
-	} else if !strings.Contains(err.Error(), otherFP) {
-		t.Fatalf("rejection error %q does not name fingerprint %q", err, otherFP)
-	}
-}
-
-func TestSignAllowsAllowedKeyBeforeDeadline(t *testing.T) {
-	upstream := newUpstream()
-	allowedPub, allowedFP := addKey(t, upstream)
-
-	p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(time.Hour))
-	sig, err := p.Sign(allowedPub, []byte("data"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if sig == nil {
-		t.Fatal("expected a signature")
-	}
-}
-
-func TestSignFailsPastDeadline(t *testing.T) {
-	upstream := newUpstream()
-	allowedPub, allowedFP := addKey(t, upstream)
-
-	p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(-time.Second))
-	if _, err := p.Sign(allowedPub, []byte("data")); err == nil {
-		t.Fatal("expected error signing past the deadline")
+func TestSignGuards(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		sign signFn
+	}{
+		{"Sign", signPlain},
+		{"SignWithFlags", signWithFlags},
+	} {
+		t.Run(tc.name+"/reject", func(t *testing.T) {
+			upstream := newUpstream()
+			_, allowedFP := addKey(t, upstream)
+			otherPub, otherFP := addKey(t, upstream)
+			p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(time.Hour))
+			if _, err := tc.sign(p, otherPub); err == nil {
+				t.Fatal("expected error signing with a non-allow-listed key")
+			} else if !strings.Contains(err.Error(), otherFP) {
+				t.Fatalf("rejection error %q does not name fingerprint %q", err, otherFP)
+			}
+		})
+		t.Run(tc.name+"/allow", func(t *testing.T) {
+			upstream := newUpstream()
+			allowedPub, allowedFP := addKey(t, upstream)
+			p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(time.Hour))
+			sig, err := tc.sign(p, allowedPub)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if sig == nil {
+				t.Fatal("expected a signature")
+			}
+		})
+		t.Run(tc.name+"/pastDeadline", func(t *testing.T) {
+			upstream := newUpstream()
+			allowedPub, allowedFP := addKey(t, upstream)
+			p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(-time.Second))
+			if _, err := tc.sign(p, allowedPub); err == nil {
+				t.Fatal("expected error signing past the deadline")
+			}
+		})
 	}
 }
 
@@ -118,47 +134,6 @@ func TestUnsupportedMethodsReturnError(t *testing.T) {
 	}
 	if _, err := p.Signers(); err == nil {
 		t.Error("expected Signers to fail")
-	}
-}
-
-func TestSignWithFlagsRejectsNonAllowedKey(t *testing.T) {
-	upstream := newUpstream()
-	_, allowedFP := addKey(t, upstream)
-	otherPub, otherFP := addKey(t, upstream)
-
-	p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(time.Hour))
-	if _, err := p.SignWithFlags(otherPub, []byte("data"), agent.SignatureFlagRsaSha256); err == nil {
-		t.Fatal("expected error signing with a non-allow-listed key")
-	} else if !strings.Contains(err.Error(), otherFP) {
-		t.Fatalf("rejection error %q does not name fingerprint %q", err, otherFP)
-	}
-}
-
-func TestSignWithFlagsAllowsAllowedKeyBeforeDeadline(t *testing.T) {
-	upstream := newUpstream()
-	allowedPub, allowedFP := addKey(t, upstream)
-
-	p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(time.Hour))
-	// flags 0 here: the test key is ed25519, which has no algorithm
-	// choice to make (unlike RSA), so this only exercises the Proxy's
-	// own allow-list/deadline guards and forwarding — not flag
-	// interpretation, which is the trusted upstream library's job.
-	sig, err := p.SignWithFlags(allowedPub, []byte("data"), 0)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if sig == nil {
-		t.Fatal("expected a signature")
-	}
-}
-
-func TestSignWithFlagsFailsPastDeadline(t *testing.T) {
-	upstream := newUpstream()
-	allowedPub, allowedFP := addKey(t, upstream)
-
-	p := NewProxy(upstream, []string{allowedFP}, time.Now().Add(-time.Second))
-	if _, err := p.SignWithFlags(allowedPub, []byte("data"), agent.SignatureFlagRsaSha256); err == nil {
-		t.Fatal("expected error signing past the deadline")
 	}
 }
 

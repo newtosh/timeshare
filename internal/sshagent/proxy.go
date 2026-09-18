@@ -71,16 +71,23 @@ func (p *Proxy) List() ([]*agent.Key, error) {
 	return filtered, nil
 }
 
+func (p *Proxy) guard(key ssh.PublicKey) error {
+	if !time.Now().Before(p.deadline) {
+		return errors.New("timeshare: SSH key grant TTL expired")
+	}
+	fingerprint := ssh.FingerprintSHA256(key)
+	if !p.allowed[fingerprint] {
+		return fmt.Errorf("timeshare: SSH key %s not in this repo's allow-list", fingerprint)
+	}
+	return nil
+}
+
 // Sign forwards to the upstream agent only if key's fingerprint is
 // allow-listed and the deadline hasn't passed; otherwise it fails
 // without ever contacting upstream.
 func (p *Proxy) Sign(key ssh.PublicKey, data []byte) (*ssh.Signature, error) {
-	if !time.Now().Before(p.deadline) {
-		return nil, errors.New("timeshare: SSH key grant TTL expired")
-	}
-	fingerprint := ssh.FingerprintSHA256(key)
-	if !p.allowed[fingerprint] {
-		return nil, fmt.Errorf("timeshare: SSH key %s not in this repo's allow-list", fingerprint)
+	if err := p.guard(key); err != nil {
+		return nil, err
 	}
 	return p.upstream.Sign(key, data)
 }
@@ -90,12 +97,8 @@ func (p *Proxy) Sign(key ssh.PublicKey, data []byte) (*ssh.Signature, error) {
 // ssh-rsa/SHA-1) — same allow-list and deadline guards as Sign, then
 // forwards to the upstream ExtendedAgent unmodified.
 func (p *Proxy) SignWithFlags(key ssh.PublicKey, data []byte, flags agent.SignatureFlags) (*ssh.Signature, error) {
-	if !time.Now().Before(p.deadline) {
-		return nil, errors.New("timeshare: SSH key grant TTL expired")
-	}
-	fingerprint := ssh.FingerprintSHA256(key)
-	if !p.allowed[fingerprint] {
-		return nil, fmt.Errorf("timeshare: SSH key %s not in this repo's allow-list", fingerprint)
+	if err := p.guard(key); err != nil {
+		return nil, err
 	}
 	return p.upstream.SignWithFlags(key, data, flags)
 }
