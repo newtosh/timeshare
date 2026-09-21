@@ -115,6 +115,27 @@ fi
 
 GOBIN=$(go env GOPATH)/bin
 
+# Refuse to plant a second copy over a Homebrew-managed install.
+if command -v brew >/dev/null 2>&1 && brew list --cask timeshare >/dev/null 2>&1; then
+	warn "timeshare is already installed via Homebrew."
+	hint "Upgrade with:  brew upgrade newtosh/tap/timeshare"
+	hint "Or remove it:  brew uninstall --cask timeshare"
+	fail "refusing to overwrite a Homebrew-managed install"
+fi
+for name in timeshare timesharedd; do
+	bin=$(command -v "$name" 2>/dev/null) || continue
+	target=$bin
+	[ -L "$bin" ] && target=$(readlink "$bin" 2>/dev/null || echo "$bin")
+	case "$bin $target" in
+	*/Cellar/*|*/Caskroom/*|*/opt/homebrew/*|*/Homebrew/*|*/homebrew/*|*/linuxbrew/*)
+		warn "timeshare on PATH is Homebrew-managed ($bin)."
+		hint "Upgrade with:  brew upgrade newtosh/tap/timeshare"
+		hint "Or remove it:  brew uninstall --cask timeshare"
+		fail "refusing to overwrite a Homebrew-managed install"
+		;;
+	esac
+done
+
 # timeshare_version BIN: print the first field of `BIN --version` (the
 # semver / describe string), or empty if BIN is missing/unusable.
 timeshare_version() {

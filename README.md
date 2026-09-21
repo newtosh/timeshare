@@ -40,6 +40,17 @@ That installs both `timeshare` and `timesharedd` from the latest GitHub
 Release via the [`newtosh/homebrew-tap`](https://github.com/newtosh/homebrew-tap)
 tap (updated automatically on each `v*` tag).
 
+Switching from `install.sh` / `go install`:
+
+```sh
+rm -f "$(go env GOPATH)/bin/timeshare" "$(go env GOPATH)/bin/timesharedd"
+brew install newtosh/tap/timeshare
+```
+
+`brew install` refuses if a non-Homebrew `timeshare` is already on
+`PATH`; `install.sh` refuses the other way. Upgrade with
+`brew upgrade newtosh/tap/timeshare`.
+
 **Script** (installs both binaries, fixes `PATH` if needed, checks for the
 1Password CLI):
 

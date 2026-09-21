@@ -85,6 +85,20 @@ homebrew_casks:
       You also need the 1Password CLI (`op`) installed and signed in:
         https://developer.1password.com/docs/cli/get-started/
     hooks:
+      # Refuse if a go-install copy is already first on PATH.
+      pre:
+        install: |
+          %w[timeshare timesharedd].each do |name|
+            path = which(name)&.to_s
+            next if path.nil?
+            next if path.match?(%r{/(Cellar|Caskroom|opt/homebrew|Homebrew|homebrew|linuxbrew)/})
+
+            odie <<~EOS
+              #{name} at #{path} is not from Homebrew and would shadow this cask.
+              Remove it, then re-run brew install:
+                rm -f #{path}
+            EOS
+          end
       post:
         # Binaries are not Apple-notarized; clear Gatekeeper quarantine so
         # first launch is not blocked. Prefer code signing later if this
