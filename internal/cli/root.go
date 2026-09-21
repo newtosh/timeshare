@@ -6,6 +6,7 @@ import (
 
 	"github.com/newtosh/timeshare/internal/config"
 	"github.com/newtosh/timeshare/internal/projectid"
+	"github.com/newtosh/timeshare/internal/version"
 
 	"github.com/spf13/cobra"
 )
@@ -33,9 +34,11 @@ func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "timeshare",
 		Short:         "Repo-scoped, TTL-cached secret bridge for 1Password",
+		Version:       version.String(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
+	root.SetVersionTemplate("{{.Version}}\n")
 	root.AddCommand(newReadCmd())
 	root.AddCommand(newRunCmd())
 	root.AddCommand(newInitCmd())

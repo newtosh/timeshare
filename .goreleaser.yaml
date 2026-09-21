@@ -1,0 +1,68 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: timeshare
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: timeshare
+    main: ./cmd/timeshare
+    binary: timeshare
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/newtosh/timeshare/internal/version.Version={{.Version}}
+      - -X github.com/newtosh/timeshare/internal/version.Commit={{.Commit}}
+      - -X github.com/newtosh/timeshare/internal/version.Date={{.Date}}
+
+  - id: timesharedd
+    main: ./cmd/timesharedd
+    binary: timesharedd
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/newtosh/timeshare/internal/version.Version={{.Version}}
+      - -X github.com/newtosh/timeshare/internal/version.Commit={{.Commit}}
+      - -X github.com/newtosh/timeshare/internal/version.Date={{.Date}}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - src: LICENSE*
+        required: false
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+
+release:
+  draft: false
+  prerelease: auto
+  name_template: "timeshare {{.Tag}}"

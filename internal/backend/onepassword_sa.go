@@ -3,9 +3,11 @@ package backend
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/newtosh/timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/version"
 
 	onepassword "github.com/1password/onepassword-sdk-go"
 )
@@ -27,7 +29,7 @@ func NewOnePasswordServiceAccount(token string) *OnePasswordServiceAccount {
 func (b *OnePasswordServiceAccount) Resolve(ctx context.Context, cfg config.Config, secretName string) (string, time.Duration, error) {
 	client, err := onepassword.NewClient(ctx,
 		onepassword.WithServiceAccountToken(b.token),
-		onepassword.WithIntegrationInfo("timeshare", "0.1.0"),
+		onepassword.WithIntegrationInfo("timeshare", strings.TrimPrefix(version.Version, "v")),
 	)
 	if err != nil {
 		return "", 0, fmt.Errorf("%w: %w", ErrAuthFailed, err)
