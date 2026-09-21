@@ -11,9 +11,9 @@ import (
 	"github.com/newtosh/timeshare/internal/config"
 )
 
-// defaultBiometricTTL matches 1Password's own documented CLI session
-// inactivity window, so timeshare's cache doesn't outlive what 1Password
-// itself considers a valid unlocked session.
+// defaultBiometricTTL is the fallback cache duration when a resolve
+// request carries no TTL of its own. It is not a ceiling on configured
+// project TTLs — those win in the daemon (see server.resolve).
 const defaultBiometricTTL = 10 * time.Minute
 
 type OnePasswordBiometric struct{}

@@ -157,12 +157,11 @@ func TestCrossProjectCacheIsolation(t *testing.T) {
 }
 
 func TestConfiguredTTLOverridesLongerBackendTTL(t *testing.T) {
-	// Regression test for the resolve() precedence bug: a backend TTL of
-	// an hour must not shadow a five-minute req.TTL (the config/--ttl
-	// value). We drive a fake clock directly through the Cache (see
-	// cache_test.go's pattern) rather than dialServer's hardcoded
-	// cache.New(time.Now), since dialServer takes an already-built
-	// *Server and never constructs the Cache itself.
+	// A backend TTL of an hour must not shadow a five-minute req.TTL
+	// (the config/--ttl value). We drive a fake clock directly through
+	// the Cache (see cache_test.go's pattern) rather than dialServer's
+	// hardcoded cache.New(time.Now), since dialServer takes an
+	// already-built *Server and never constructs the Cache itself.
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	clock := func() time.Time { return now }
 
@@ -193,6 +192,34 @@ func TestConfiguredTTLOverridesLongerBackendTTL(t *testing.T) {
 	now = now.Add(2 * time.Minute) // total 6 minutes since Set
 	if _, ok := srv.Cache.Get("p\x00X"); ok {
 		t.Fatal("expected entry expired at the shorter configured TTL, not the longer backend TTL")
+	}
+}
+
+func TestConfiguredTTLOverridesShorterBackendTTL(t *testing.T) {
+	// Regression for the biometric/SA default acting as a silent ceiling:
+	// an 8h project TTL must win over a 10m backend suggestion.
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	clock := func() time.Time { return now }
+
+	mock := &backendtest.Mock{ValueFor: map[string]string{"X": "v"}, TTL: 10 * time.Minute}
+	srv := &Server{Cache: cache.New(clock), Backend: mock}
+	conn := dialServer(t, srv)
+
+	req := Request{ProjectID: "p", SecretName: "X", AllowedItems: []string{"X"}, TTL: 8 * time.Hour}
+	if err := WriteMessage(conn, req); err != nil {
+		t.Fatal(err)
+	}
+	var resp Response
+	if err := ReadMessage(conn, &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Error != "" {
+		t.Fatalf("unexpected error: %s", resp.Error)
+	}
+
+	now = now.Add(30 * time.Minute) // past backend default, within configured TTL
+	if _, ok := srv.Cache.Get("p\x00X"); !ok {
+		t.Fatal("expected cache hit after backend default TTL; configured 8h TTL should win")
 	}
 }
 

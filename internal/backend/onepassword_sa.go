@@ -12,10 +12,9 @@ import (
 	onepassword "github.com/1password/onepassword-sdk-go"
 )
 
-// defaultServiceAccountTTL is used when the request did not carry an
-// explicit TTL. Service-account reads have no interactive approval step to
-// avoid, so this TTL exists purely to bound how long a value sits in the
-// daemon's in-memory cache before a fresh SDK call re-validates it.
+// defaultServiceAccountTTL is the fallback cache duration when a resolve
+// request carries no TTL of its own. Configured project TTLs win in the
+// daemon; this is not a ceiling.
 const defaultServiceAccountTTL = 15 * time.Minute
 
 type OnePasswordServiceAccount struct {
