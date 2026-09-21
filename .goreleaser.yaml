@@ -91,7 +91,16 @@ homebrew_casks:
           %w[timeshare timesharedd].each do |name|
             path = which(name)&.to_s
             next if path.nil?
-            next if path.match?(%r{/(Cellar|Caskroom|opt/homebrew|Homebrew|homebrew|linuxbrew)/})
+
+            # Intel Homebrew puts a symlink at /usr/local/bin; resolve so
+            # Cellar/Caskroom paths match (PATH entry alone would not).
+            resolved = begin
+              Pathname.new(path).realpath.to_s
+            rescue Errno::ENOENT
+              path
+            end
+            homebrew = %r{/(Cellar|Caskroom|opt/homebrew|Homebrew|homebrew|linuxbrew)/}
+            next if resolved.match?(homebrew) || path.match?(homebrew)
 
             odie <<~EOS
               #{name} at #{path} is not from Homebrew and would shadow this cask.
