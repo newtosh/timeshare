@@ -24,12 +24,15 @@ type Client struct {
 }
 
 // DefaultSocketPath returns the platform-standard runtime path for the
-// daemon socket.
+// daemon socket. The path embeds a protocol generation so a CLI that
+// speaks a newer request shape (e.g. per-item Field) never silently
+// dials an older timesharedd that would ignore unknown JSON fields.
 func DefaultSocketPath() string {
+	const protocolGen = "p2" // bump when the request wire format gains required fields
 	if dir := os.Getenv("XDG_RUNTIME_DIR"); dir != "" {
-		return filepath.Join(dir, "timeshare", "agent.sock")
+		return filepath.Join(dir, "timeshare", protocolGen, "agent.sock")
 	}
-	return filepath.Join(os.TempDir(), fmt.Sprintf("timeshare-%d", os.Getuid()), "agent.sock")
+	return filepath.Join(os.TempDir(), fmt.Sprintf("timeshare-%d", os.Getuid()), protocolGen, "agent.sock")
 }
 
 // Read sends req to the daemon, spawning it first if the socket is

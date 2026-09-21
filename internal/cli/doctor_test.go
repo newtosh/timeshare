@@ -20,7 +20,7 @@ func TestVerifyConfiguredItems(t *testing.T) {
 		return onepassword.Item{}, fmt.Errorf("not found: %s", ref)
 	}
 
-	errs := verifyConfiguredItems(config.Config{Vault: "v", Items: []string{"DATABASE_URL", "MISSING"}})
+	errs := verifyConfiguredItems(config.Config{Vault: "v", Items: []config.Item{{Name: "DATABASE_URL"}, {Name: "MISSING"}}})
 	if len(errs) != 1 {
 		t.Fatalf("errs = %v", errs)
 	}

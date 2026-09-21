@@ -126,7 +126,7 @@ func TestBackendErrorIsSurfacedNotCached(t *testing.T) {
 	if resp.Error == "" {
 		t.Fatal("expected error surfaced to caller")
 	}
-	if _, ok := srv.Cache.Get("p\x00X"); ok {
+	if _, ok := srv.Cache.Get("p\x00X\x00"); ok {
 		t.Fatal("a failed resolve must not populate the cache")
 	}
 }
@@ -202,7 +202,7 @@ func TestConfiguredTTLWins(t *testing.T) {
 			}
 
 			now = now.Add(tc.advance)
-			_, hit := srv.Cache.Get("p\x00X")
+			_, hit := srv.Cache.Get("p\x00X\x00")
 			if hit != tc.wantHit {
 				t.Fatalf("cache hit=%v, want %v after %v", hit, tc.wantHit, tc.advance)
 			}
@@ -246,8 +246,37 @@ func TestLockEvictsProjectCache(t *testing.T) {
 		t.Fatalf("unexpected error: %s", lockResp.Error)
 	}
 
-	if _, ok := srv.Cache.Get("p\x00X"); ok {
+	if _, ok := srv.Cache.Get("p\x00X\x00"); ok {
 		t.Fatal("expected cache evicted after lock")
+	}
+}
+
+func TestCacheKeyIncludesField(t *testing.T) {
+	// Hand-editing field: notesPlain after a password resolve must not
+	// reuse the cached password for the remainder of the TTL.
+	mock := &backendtest.Mock{ValueFor: map[string]string{"TOKEN": "password-value"}, TTL: time.Hour}
+	srv := &Server{Cache: cache.New(time.Now), Backend: mock}
+
+	reqPassword := Request{ProjectID: "p", SecretName: "TOKEN", AllowedItems: []string{"TOKEN"}, TTL: time.Hour}
+	conn := dialServer(t, srv)
+	_ = WriteMessage(conn, reqPassword)
+	var resp Response
+	_ = ReadMessage(conn, &resp)
+	if resp.Value != "password-value" {
+		t.Fatalf("got %q", resp.Value)
+	}
+
+	mock.ValueFor["TOKEN"] = "notes-value"
+	reqNotes := Request{ProjectID: "p", SecretName: "TOKEN", Field: "notesPlain", AllowedItems: []string{"TOKEN"}, TTL: time.Hour}
+	conn2 := dialServer(t, srv)
+	_ = WriteMessage(conn2, reqNotes)
+	var resp2 Response
+	_ = ReadMessage(conn2, &resp2)
+	if resp2.Value != "notes-value" {
+		t.Fatalf("field override reused password cache: got %q", resp2.Value)
+	}
+	if len(mock.Calls) != 2 {
+		t.Fatalf("expected a backend call per field, got %d", len(mock.Calls))
 	}
 }
 

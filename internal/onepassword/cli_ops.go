@@ -196,8 +196,9 @@ func GetItemFingerprint(vault, ref string) (string, error) {
 	return raw.Value, nil
 }
 
-// DefaultSecretField is the Login-item field timeshare reads for cached
-// secrets. Non-password fields (notes, custom) are not yet configurable.
+// DefaultSecretField is the Login-item field timeshare reads when an
+// items: entry does not set field: (Secure Notes typically need
+// notesPlain — see .timeshare.yml per-item field override).
 const DefaultSecretField = "password"
 
 // ReadField reads a single field from an item via `op item get` with

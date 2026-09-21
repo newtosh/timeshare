@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/newtosh/timeshare/internal/config"
 	"github.com/newtosh/timeshare/internal/onepassword"
 )
 
@@ -34,9 +35,9 @@ func TestTransferIntoAllSucceed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := []string{"A", "B"}
-	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
-		t.Fatalf("got %v, want %v", got, want)
+	names := config.Config{Items: got}.ItemNames()
+	if len(names) != 2 || names[0] != "A" || names[1] != "B" {
+		t.Fatalf("got %v, want [A B]", got)
 	}
 }
 
@@ -50,7 +51,8 @@ func TestTransferIntoPartialFailureReturnsDoneSoFar(t *testing.T) {
 		t.Fatal("expected an error from the failing 2nd transfer")
 	}
 	// Item A transferred before the failure on B; C was never attempted.
-	if len(got) != 1 || got[0] != "A" {
+	names := config.Config{Items: got}.ItemNames()
+	if len(names) != 1 || names[0] != "A" {
 		t.Fatalf("expected partial result [A], got %v", got)
 	}
 }
@@ -59,11 +61,12 @@ func TestTransferIntoPreservesAlreadyDone(t *testing.T) {
 	withFakeTransferItems(t, 0, nil)
 	picked := []onepassword.Item{{ID: "2", Title: "B"}}
 
-	got, err := transferInto("dest", "src", picked, []string{"A"}, false)
+	got, err := transferInto("dest", "src", picked, []config.Item{{Name: "A"}}, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(got) != 2 || got[0] != "A" || got[1] != "B" {
+	names := config.Config{Items: got}.ItemNames()
+	if len(names) != 2 || names[0] != "A" || names[1] != "B" {
 		t.Fatalf("got %v, want [A B]", got)
 	}
 }

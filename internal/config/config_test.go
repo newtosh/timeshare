@@ -40,8 +40,78 @@ items:
 	if cfg.TTL != 4*time.Hour {
 		t.Errorf("TTL = %v", cfg.TTL)
 	}
-	if len(cfg.Items) != 2 || cfg.Items[0] != "DATABASE_URL" {
+	if len(cfg.Items) != 2 || cfg.Items[0].Name != "DATABASE_URL" {
 		t.Errorf("Items = %v", cfg.Items)
+	}
+}
+
+func TestLoadItemFieldOverride(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, `
+vault: project-x-secrets
+mode: biometric
+ttl: 4h
+items:
+  - DATABASE_URL
+  - name: sbg-engtools.gen
+    field: notesPlain
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Items) != 2 {
+		t.Fatalf("Items = %v", cfg.Items)
+	}
+	if cfg.Items[0].Name != "DATABASE_URL" || cfg.Items[0].Field != "" {
+		t.Errorf("bare item = %+v", cfg.Items[0])
+	}
+	if cfg.Items[1].Name != "sbg-engtools.gen" || cfg.Items[1].Field != "notesPlain" {
+		t.Errorf("mapped item = %+v", cfg.Items[1])
+	}
+	if got := cfg.FieldFor("sbg-engtools.gen"); got != "notesPlain" {
+		t.Errorf("FieldFor = %q", got)
+	}
+	if got := cfg.FieldFor("DATABASE_URL"); got != "" {
+		t.Errorf("FieldFor bare = %q, want empty", got)
+	}
+}
+
+func TestWriteLoadRoundTripItemField(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{
+		Vault: "project-x-secrets",
+		Mode:  ModeBiometric,
+		TTL:   4 * time.Hour,
+		Items: []Item{
+			{Name: "DATABASE_URL"},
+			{Name: "sbg-engtools.gen", Field: "notesPlain"},
+		},
+	}
+	path := filepath.Join(dir, ".timeshare.yml")
+	if err := Write(path, cfg); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(loaded.Items) != 2 || loaded.Items[1].Field != "notesPlain" {
+		t.Fatalf("got %+v", loaded.Items)
+	}
+}
+
+func TestLoadRejectsItemMappingWithoutName(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, `
+vault: v
+mode: biometric
+ttl: 1h
+items:
+  - field: notesPlain
+`)
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected error for items mapping missing name")
 	}
 }
 
@@ -98,7 +168,7 @@ func TestLoadMissingFile(t *testing.T) {
 }
 
 func TestAllows(t *testing.T) {
-	cfg := Config{Items: []string{"DATABASE_URL", "STRIPE_KEY"}}
+	cfg := Config{Items: []Item{{Name: "DATABASE_URL"}, {Name: "STRIPE_KEY"}}}
 	if !cfg.Allows("STRIPE_KEY") {
 		t.Error("expected STRIPE_KEY to be allowed")
 	}
@@ -113,7 +183,7 @@ func TestWriteLoadRoundTrip(t *testing.T) {
 		Vault: "project-x-secrets",
 		Mode:  ModeServiceAccount,
 		TTL:   4 * time.Hour,
-		Items: []string{"DATABASE_URL"},
+		Items: []Item{{Name: "DATABASE_URL"}},
 	}
 
 	path := filepath.Join(dir, ".timeshare.yml")
@@ -143,7 +213,7 @@ func TestWriteLoadRoundTripYAMLSpecialContent(t *testing.T) {
 		Vault: "Team: Ops #prod",
 		Mode:  ModeBiometric,
 		TTL:   4 * time.Hour,
-		Items: []string{"DATABASE_URL: primary"},
+		Items: []Item{{Name: "DATABASE_URL: primary"}},
 	}
 
 	path := filepath.Join(dir, ".timeshare.yml")
@@ -206,7 +276,7 @@ func TestWriteLoadRoundTripSSHKeys(t *testing.T) {
 		Vault:   "project-x-secrets",
 		Mode:    ModeBiometric,
 		TTL:     4 * time.Hour,
-		Items:   []string{"DATABASE_URL"},
+		Items:   []Item{{Name: "DATABASE_URL"}},
 		SSHKeys: []string{"Private/deploy-key-prod"},
 	}
 	path := filepath.Join(dir, ".timeshare.yml")

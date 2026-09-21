@@ -117,8 +117,8 @@ func check(name string, fn func() error) bool {
 func verifyConfiguredItems(cfg config.Config) []error {
 	var errs []error
 	for _, item := range cfg.Items {
-		if _, err := doctorGetItem(cfg.Vault, item); err != nil {
-			errs = append(errs, fmt.Errorf("item %q in vault %q: %w", item, cfg.Vault, err))
+		if _, err := doctorGetItem(cfg.Vault, item.Name); err != nil {
+			errs = append(errs, fmt.Errorf("item %q in vault %q: %w", item.Name, cfg.Vault, err))
 		}
 	}
 	return errs

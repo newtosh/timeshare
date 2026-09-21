@@ -21,22 +21,22 @@ var copyItem = onepassword.CopyItem
 
 // transferInto copies (or, if move is true, moves) each of picked from
 // sourceVault into destVault, printing progress as it goes. It returns
-// alreadyMoved plus every item transferred successfully in THIS call,
+// already plus every item transferred successfully in THIS call,
 // alongside any error — including on error, so a caller can persist a
 // partial result instead of losing track of what really happened in
 // 1Password before the failure.
-func transferInto(destVault, sourceVault string, picked []onepassword.Item, alreadyMoved []string, move bool) ([]string, error) {
+func transferInto(destVault, sourceVault string, picked []onepassword.Item, already []config.Item, move bool) ([]config.Item, error) {
 	verb, do := "Copying", copyItem
 	if move {
 		verb, do = "Moving", moveItem
 	}
-	items := append([]string{}, alreadyMoved...)
+	items := append([]config.Item{}, already...)
 	for _, item := range picked {
 		fmt.Printf("%s %q into %q...\n", verb, item.Title, destVault)
 		if err := do(item.ID, sourceVault, destVault); err != nil {
 			return items, fmt.Errorf("transferring item %q failed (already done: %v): %w", item.Title, items, err)
 		}
-		items = append(items, item.Title)
+		items = append(items, config.Item{Name: item.Title})
 	}
 	return items, nil
 }
@@ -62,7 +62,7 @@ func printSuggestions(sourceVault, ref string) {
 }
 
 // runInit is the shared execution core for a fully-specified wizardState:
-// create the vault, move/collect items, write .timeshare.yml. Both the
+// create the vault, copy/collect items, write .timeshare.yml. Both the
 // --non-interactive path and the completed interactive wizard funnel
 // through this — it doesn't know or care which one produced s.
 func runInit(cwd string, s *wizardState) error {
@@ -85,7 +85,10 @@ func runInit(cwd string, s *wizardState) error {
 		return fmt.Errorf("creating vault: %w", err)
 	}
 
-	items := append([]string{}, s.Items...)
+	items := make([]config.Item, len(s.Items))
+	for i, name := range s.Items {
+		items[i] = config.Item{Name: name}
+	}
 	if s.FromVault != "" {
 		existing, err := onepassword.ListItems(s.FromVault)
 		if err != nil {
@@ -111,14 +114,14 @@ func runInit(cwd string, s *wizardState) error {
 			sourceVault = spec
 		}
 
-		var toMove []onepassword.Item
+		var toTransfer []onepassword.Item
 		if hasRef {
 			item, err := onepassword.GetItem(sourceVault, ref)
 			if err != nil {
 				printSuggestions(sourceVault, ref)
 				return fmt.Errorf("resolving %q in vault %q: %w", ref, sourceVault, err)
 			}
-			toMove = []onepassword.Item{item}
+			toTransfer = []onepassword.Item{item}
 		} else {
 			sourceItems, err := onepassword.ListItems(sourceVault)
 			if err != nil {
@@ -128,11 +131,11 @@ func runInit(cwd string, s *wizardState) error {
 			if err != nil {
 				return fmt.Errorf("picking items from %s: %w", sourceVault, err)
 			}
-			toMove = picked
+			toTransfer = picked
 		}
 
 		var transferErr error
-		items, transferErr = transferInto(s.Vault, sourceVault, toMove, items, s.Move)
+		items, transferErr = transferInto(s.Vault, sourceVault, toTransfer, items, s.Move)
 		if transferErr != nil {
 			return transferErr
 		}

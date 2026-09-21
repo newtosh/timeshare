@@ -23,7 +23,7 @@ const (
 var wizardStepLabels = [stepCount]string{
 	stepVault:   "Repo vault name",
 	stepMode:    "Auth mode",
-	stepItems:   "Items to move",
+	stepItems:   "Items to copy",
 	stepSSHKeys: "SSH keys",
 	stepTTL:     "TTL",
 }
@@ -31,7 +31,7 @@ var wizardStepLabels = [stepCount]string{
 var wizardStepHelp = [stepCount]string{
 	stepVault:   "The name of a new, dedicated 1Password vault timeshare will create for this repo. Pick something specific to this repo — it shouldn't be shared with unrelated projects.",
 	stepMode:    "Biometric: shells out to `op read`, same Touch ID/Windows Hello prompt you already get, cached for the TTL. Service account: headless, token-based, no prompts at all, but requires a manual token-store step after init (see the printed instructions).",
-	stepItems:   "Which 1Password items should this project's allow-list include. You can move items from an existing vault, or pick from a list interactively.",
+	stepItems:   "Which 1Password items should this project's allow-list include. Items are copied from an existing vault by default (originals stay put); pass --move to relocate instead. Or pick from a list interactively.",
 	stepSSHKeys: "Optional: which SSH keys (already stored in 1Password) this repo's `timeshare run` may use, time-boxed by the same TTL as everything else. Keys are never moved or copied — this only records a reference to wherever they already live.",
 	stepTTL:     "How long a resolved secret stays cached before the next read re-checks 1Password. Longer means fewer prompts but a longer window before a rotated/revoked secret takes effect.",
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"net"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -122,4 +124,13 @@ func makeStaleUnixSocket(t *testing.T, path string) {
 		t.Fatalf("expected stale socket file to remain: %v", err)
 	}
 	t.Cleanup(func() { _ = os.Remove(path) })
+}
+
+func TestDefaultSocketPathIncludesProtocolGen(t *testing.T) {
+	// New request fields (e.g. Field) must not dial an older daemon that
+	// ignores unknown JSON; the path generation isolates the wire formats.
+	got := DefaultSocketPath()
+	if !strings.Contains(got, string(filepath.Separator)+"p2"+string(filepath.Separator)) {
+		t.Fatalf("DefaultSocketPath %q missing protocol generation segment", got)
+	}
 }

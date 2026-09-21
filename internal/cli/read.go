@@ -51,7 +51,8 @@ func newReadCmd() *cobra.Command {
 				Vault:        cfg.Vault,
 				Mode:         cfg.Mode,
 				TTL:          ttl,
-				AllowedItems: cfg.Items,
+				Field:        cfg.FieldFor(secretName),
+				AllowedItems: cfg.ItemNames(),
 			})
 			if err != nil {
 				return err

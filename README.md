@@ -147,13 +147,18 @@ ttl: 4h
 items:
   - DATABASE_URL
   - STRIPE_KEY
+  # Secure Notes / custom fields: override the Login default ("password")
+  - name: sbg-engtools.gen
+    field: notesPlain
 ssh_keys:
   - Private/deploy-key-prod
 ```
 
 `items` is an allow-list enforced by the daemon itself, independent of
 whatever the underlying 1Password vault grant would otherwise permit — see
-[SECURITY.md](SECURITY.md).
+[SECURITY.md](SECURITY.md). Each entry may be a bare item name (reads the
+Login `password` field) or a mapping with `field:` when the secret lives
+elsewhere on the item (Secure Note `notesPlain`, custom labels, etc.).
 
 `ssh_keys` is optional and works differently: each entry is a
 `<vault>/<item>` reference to an SSH Key item that already exists in

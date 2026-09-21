@@ -124,7 +124,7 @@ func (s *Server) resolve(req Request) Response {
 		return Response{Error: "secret \"" + req.SecretName + "\" is not in this project's allow-list"}
 	}
 
-	key := req.ProjectID + "\x00" + req.SecretName
+	key := req.ProjectID + "\x00" + req.SecretName + "\x00" + req.Field
 	if value, ok := s.Cache.Get(key); ok {
 		return Response{Value: value}
 	}
@@ -147,5 +147,11 @@ func (s *Server) resolve(req Request) Response {
 }
 
 func reqToConfig(req Request) config.Config {
-	return config.Config{Vault: req.Vault, Mode: req.Mode}
+	return config.Config{
+		Vault: req.Vault,
+		Mode:  req.Mode,
+		// Carry the per-request field override so backends can resolve
+		// Secure Notes / custom fields without hardcoding "password".
+		Items: []config.Item{{Name: req.SecretName, Field: req.Field}},
+	}
 }
