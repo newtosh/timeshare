@@ -3,10 +3,13 @@ package client
 import (
 	"context"
 	"net"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/newtosh/timeshare/internal/daemon"
+
+	"golang.org/x/sys/unix"
 )
 
 // startFakeDaemon listens on a temp socket and answers exactly one request
@@ -63,4 +66,73 @@ func TestReadFailsFastWithoutSpawnBinaryConfigured(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected connection error when no daemon is running and DaemonBinary is unset")
 	}
+}
+
+func TestIsConnRefused(t *testing.T) {
+	sockPath := t.TempDir() + "/agent.sock"
+	makeStaleUnixSocket(t, sockPath)
+
+	_, dialErr := net.Dial("unix", sockPath)
+	if dialErr == nil {
+		t.Fatal("expected dial against stale socket to fail")
+	}
+	if !isConnRefused(dialErr) {
+		t.Fatalf("expected ECONNREFUSED, got %v", dialErr)
+	}
+}
+
+func TestDialUnlinksStaleSocketBeforeSpawn(t *testing.T) {
+	dir := t.TempDir()
+	sockPath := dir + "/agent.sock"
+	makeStaleUnixSocket(t, sockPath)
+
+	// Spawn binary that records whether the socket path still existed
+	// when it started, then exits. We only care that dial unlinked
+	// before spawn — not that a real daemon comes up.
+	probe := dir + "/probe.sh"
+	marker := dir + "/was-gone"
+	script := "#!/bin/sh\n" +
+		"sock=\n" +
+		"while [ $# -gt 0 ]; do\n" +
+		"  case \"$1\" in --socket) sock=$2; shift 2;; *) shift;; esac\n" +
+		"done\n" +
+		"if [ ! -e \"$sock\" ]; then touch '" + marker + "'; fi\n"
+	if err := os.WriteFile(probe, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	c := &Client{SocketPath: sockPath, DaemonBinary: probe}
+	_, _ = c.dial(context.Background()) // expect eventual failure — probe exits
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(marker); err == nil {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("spawn probe did not see socket already unlinked")
+}
+
+// makeStaleUnixSocket binds a unix stream socket and closes the fd without
+// unlinking, leaving a socket inode nothing listens on — the classic
+// "daemon crashed" leftover that dials as ECONNREFUSED. net.Listen's
+// Close would remove the file on this platform, so we use the raw syscall.
+func makeStaleUnixSocket(t *testing.T, path string) {
+	t.Helper()
+	fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := unix.Bind(fd, &unix.SockaddrUnix{Name: path}); err != nil {
+		_ = unix.Close(fd)
+		t.Fatal(err)
+	}
+	if err := unix.Close(fd); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected stale socket file to remain: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(path) })
 }
