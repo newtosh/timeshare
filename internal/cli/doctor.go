@@ -70,6 +70,30 @@ func newDoctorCmd() *cobra.Command {
 				}
 			}
 
+			// Metadata-only existence checks — catch typos before mid-run.
+			if len(cfg.Items) > 0 {
+				itemErrs := verifyConfiguredItems(cfg)
+				if len(itemErrs) == 0 {
+					fmt.Println(passStyle.Render(fmt.Sprintf("✓ %d configured item(s) exist in vault", len(cfg.Items))))
+				} else {
+					for _, err := range itemErrs {
+						fmt.Println(failStyle.Render("✗ configured item") + ": " + err.Error())
+						failed++
+					}
+				}
+			}
+			if len(cfg.SSHKeys) > 0 {
+				sshErrs := verifyConfiguredSSHKeys(cfg.SSHKeys)
+				if len(sshErrs) == 0 {
+					fmt.Println(passStyle.Render(fmt.Sprintf("✓ %d configured ssh_key(s) resolve", len(cfg.SSHKeys))))
+				} else {
+					for _, err := range sshErrs {
+						fmt.Println(failStyle.Render("✗ configured ssh_key") + ": " + err.Error())
+						failed++
+					}
+				}
+			}
+
 			if failed > 0 {
 				return fmt.Errorf("%d check(s) failed", failed)
 			}
