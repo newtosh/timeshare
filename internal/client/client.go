@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/newtosh/timeshare/internal/daemon"
@@ -72,6 +73,14 @@ func (c *Client) dial(ctx context.Context) (net.Conn, error) {
 		return nil, err
 	}
 
+	// A leftover socket file from a crashed daemon dials as "connection
+	// refused". Unlink it before spawn so the new daemon's Listen isn't
+	// racing a dead inode (timesharedd also Removes on start; this just
+	// makes recovery reliable when spawn is about to run).
+	if isConnRefused(err) {
+		_ = os.Remove(c.SocketPath)
+	}
+
 	if spawnErr := c.spawnDaemon(); spawnErr != nil {
 		return nil, fmt.Errorf("daemon unreachable and spawn failed: %w", spawnErr)
 	}
@@ -86,6 +95,14 @@ func (c *Client) dial(ctx context.Context) (net.Conn, error) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	return nil, fmt.Errorf("daemon did not become reachable after spawn: %w", err)
+}
+
+func isConnRefused(err error) bool {
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		err = opErr.Err
+	}
+	return errors.Is(err, syscall.ECONNREFUSED)
 }
 
 func (c *Client) spawnDaemon() error {
