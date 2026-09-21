@@ -66,7 +66,28 @@ mode: biometric
 ttl: 1h
 `)
 	if _, err := Load(path); err == nil {
-		t.Fatal("expected error when items list is empty")
+		t.Fatal("expected error when items and ssh_keys are both empty")
+	}
+}
+
+func TestLoadAcceptsSSHKeysOnly(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, `
+vault: project-x-secrets
+mode: biometric
+ttl: 4h
+ssh_keys:
+  - Private/deploy-key-prod
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Items) != 0 {
+		t.Errorf("Items = %v, want empty", cfg.Items)
+	}
+	if len(cfg.SSHKeys) != 1 || cfg.SSHKeys[0] != "Private/deploy-key-prod" {
+		t.Errorf("SSHKeys = %v", cfg.SSHKeys)
 	}
 }
 
