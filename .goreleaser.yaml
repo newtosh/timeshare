@@ -117,13 +117,16 @@ homebrew_casks:
       # Keep clearing quarantine until notarized builds ship (explicit
       # product choice: first-launch UX over Gatekeeper on these two
       # unsigned CLI binaries). Documented in caveats above.
+      # GoReleaser re-templates the rendered cask with missingkey=error, so
+      # literal {{staged_path}} would abort the release. Emit Go template
+      # that prints the Homebrew steps token Homebrew expands at install.
       postflight_steps do
         on_macos do
           run "/usr/bin/xattr",
-              args: ["-dr", "com.apple.quarantine", "{{staged_path}}/timeshare"],
+              args: ["-dr", "com.apple.quarantine", "{{ "{{" }}staged_path{{ "}}" }}/timeshare"],
               must_succeed: false
           run "/usr/bin/xattr",
-              args: ["-dr", "com.apple.quarantine", "{{staged_path}}/timesharedd"],
+              args: ["-dr", "com.apple.quarantine", "{{ "{{" }}staged_path{{ "}}" }}/timesharedd"],
               must_succeed: false
         end
       end
