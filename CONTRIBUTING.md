@@ -56,8 +56,22 @@ git push origin v0.1.3
 
 Pushing the tag runs `.github/workflows/release.yml` (GoReleaser), which
 builds linux/darwin amd64+arm64 binaries for `timeshare` and `timesharedd`,
-attaches them to a GitHub Release, and embeds the tag/commit/date into
-`--version` output via ldflags.
+attaches them to a GitHub Release, embeds the tag/commit/date into
+`--version` output via ldflags, and updates the Homebrew cask in
+[`newtosh/homebrew-tap`](https://github.com/newtosh/homebrew-tap).
+
+### Homebrew tap token (one-time)
+
+GoReleaser pushes the cask into a **separate** repo, so the default
+`GITHUB_TOKEN` is not enough. Create a fine-grained personal access token
+scoped to `newtosh/homebrew-tap` with **Contents: Read and write**, then:
+
+```sh
+gh secret set HOMEBREW_TAP_TOKEN -R newtosh/timeshare
+```
+
+(paste the token when prompted). Without this secret, the GitHub Release
+still publishes; only the tap update is skipped/fails.
 
 Do not retag or force-push an existing version tag — publish the next
 patch (e.g. `v0.1.4`) instead.

@@ -30,6 +30,16 @@ only one is fully usable end to end right now:
 
 ## Install
 
+**Homebrew** (macOS / Linuxbrew):
+
+```sh
+brew install newtosh/tap/timeshare
+```
+
+That installs both `timeshare` and `timesharedd` from the latest GitHub
+Release via the [`newtosh/homebrew-tap`](https://github.com/newtosh/homebrew-tap)
+tap (updated automatically on each `v*` tag).
+
 **Script** (installs both binaries, fixes `PATH` if needed, checks for the
 1Password CLI):
 

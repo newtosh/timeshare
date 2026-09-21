@@ -47,6 +47,7 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
+      - LICENSE
 
 checksum:
   name_template: checksums.txt
@@ -64,3 +65,37 @@ release:
   draft: false
   prerelease: auto
   name_template: "timeshare {{.Tag}}"
+
+# Publishes Casks/timeshare.rb into newtosh/homebrew-tap on each tagged
+# release. Requires repo secret HOMEBREW_TAP_TOKEN (Contents: write on the
+# tap). Default GITHUB_TOKEN cannot push to another repository.
+homebrew_casks:
+  - name: timeshare
+    binaries:
+      - timeshare
+      - timesharedd
+    homepage: "https://github.com/newtosh/timeshare"
+    description: "Repo-scoped, TTL-cached secret bridge for 1Password"
+    directory: Casks
+    commit_msg_template: "timeshare {{ .Tag }}"
+    caveats: |
+      timesharedd is spawned automatically by `timeshare` on first use —
+      you do not need to start it by hand.
+
+      You also need the 1Password CLI (`op`) installed and signed in:
+        https://developer.1password.com/docs/cli/get-started/
+    hooks:
+      post:
+        # Binaries are not Apple-notarized; clear Gatekeeper quarantine so
+        # first launch is not blocked. Prefer code signing later if this
+        # becomes painful for users.
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/timeshare"]
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/timesharedd"]
+          end
+    repository:
+      owner: newtosh
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    skip_upload: auto
