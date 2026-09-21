@@ -30,6 +30,31 @@ only one is fully usable end to end right now:
 
 ## Install
 
+**Homebrew** (macOS):
+
+```sh
+brew install newtosh/tap/timeshare
+```
+
+That installs both `timeshare` and `timesharedd` from the latest GitHub
+Release via the [`newtosh/homebrew-tap`](https://github.com/newtosh/homebrew-tap)
+tap (updated automatically on each `v*` tag). Homebrew Casks are
+macOS-only — on Linux use the script or `go install` below.
+
+Switching from `install.sh` / `go install`:
+
+```sh
+gopath=$(go env GOPATH 2>/dev/null)
+if [ -n "$gopath" ]; then
+  rm -f "$gopath/bin/timeshare" "$gopath/bin/timesharedd"
+fi
+brew install newtosh/tap/timeshare
+```
+
+`brew install` refuses if a non-Homebrew `timeshare` is already on
+`PATH`; `install.sh` refuses the other way. Upgrade with
+`brew upgrade newtosh/tap/timeshare`.
+
 **Script** (installs both binaries, fixes `PATH` if needed, checks for the
 1Password CLI):
 
