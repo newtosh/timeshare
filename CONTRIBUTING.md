@@ -62,9 +62,8 @@ To live-check rejection and TTL on a Mac with 1Password's agent:
 
 Secret-cache TTL (biometric/`items`) is separate: set `ttl: 8h`,
 `timeshare read ITEM` twice more than 10 minutes apart, and confirm the
-second read does not re-prompt. Regression coverage for the configured
-TTL winning over backend defaults lives in
-`internal/daemon.TestConfiguredTTLOverridesShorterBackendTTL`.
+second read does not re-prompt. Automated coverage that configured TTL
+wins over backend defaults lives in `internal/daemon` (`TestConfiguredTTL*`).
 
 ## Releasing
 
