@@ -156,70 +156,57 @@ func TestCrossProjectCacheIsolation(t *testing.T) {
 	}
 }
 
-func TestConfiguredTTLOverridesLongerBackendTTL(t *testing.T) {
-	// A backend TTL of an hour must not shadow a five-minute req.TTL
-	// (the config/--ttl value). We drive a fake clock directly through
-	// the Cache (see cache_test.go's pattern) rather than dialServer's
-	// hardcoded cache.New(time.Now), since dialServer takes an
-	// already-built *Server and never constructs the Cache itself.
-	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	clock := func() time.Time { return now }
-
-	mock := &backendtest.Mock{ValueFor: map[string]string{"X": "v"}, TTL: time.Hour}
-	srv := &Server{Cache: cache.New(clock), Backend: mock}
-	conn := dialServer(t, srv)
-
-	req := Request{ProjectID: "p", SecretName: "X", AllowedItems: []string{"X"}, TTL: 5 * time.Minute}
-	if err := WriteMessage(conn, req); err != nil {
-		t.Fatal(err)
+func TestConfiguredTTLWins(t *testing.T) {
+	// Configured/override TTL always wins over the backend suggestion —
+	// shorter and longer. Fake clock via Cache (see cache_test.go).
+	cases := []struct {
+		name    string
+		backend time.Duration
+		req     time.Duration
+		advance time.Duration
+		wantHit bool
+	}{
+		{
+			name:    "shorter configured expires before longer backend",
+			backend: time.Hour,
+			req:     5 * time.Minute,
+			advance: 6 * time.Minute,
+			wantHit: false,
+		},
+		{
+			name:    "longer configured survives past shorter backend default",
+			backend: 10 * time.Minute,
+			req:     8 * time.Hour,
+			advance: 30 * time.Minute,
+			wantHit: true,
+		},
 	}
-	var resp Response
-	if err := ReadMessage(conn, &resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp.Error != "" {
-		t.Fatalf("unexpected error: %s", resp.Error)
-	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+			clock := func() time.Time { return now }
+			mock := &backendtest.Mock{ValueFor: map[string]string{"X": "v"}, TTL: tc.backend}
+			srv := &Server{Cache: cache.New(clock), Backend: mock}
+			conn := dialServer(t, srv)
 
-	// Still within the 5-minute req.TTL: cache hit.
-	now = now.Add(4 * time.Minute)
-	if _, ok := srv.Cache.Get("p\x00X"); !ok {
-		t.Fatal("expected cache hit before the shorter configured TTL elapses")
-	}
+			req := Request{ProjectID: "p", SecretName: "X", AllowedItems: []string{"X"}, TTL: tc.req}
+			if err := WriteMessage(conn, req); err != nil {
+				t.Fatal(err)
+			}
+			var resp Response
+			if err := ReadMessage(conn, &resp); err != nil {
+				t.Fatal(err)
+			}
+			if resp.Error != "" {
+				t.Fatalf("unexpected error: %s", resp.Error)
+			}
 
-	// Past the 5-minute req.TTL but well within the backend's 1-hour TTL:
-	// if the backend TTL had won (the bug), this would still be a hit.
-	now = now.Add(2 * time.Minute) // total 6 minutes since Set
-	if _, ok := srv.Cache.Get("p\x00X"); ok {
-		t.Fatal("expected entry expired at the shorter configured TTL, not the longer backend TTL")
-	}
-}
-
-func TestConfiguredTTLOverridesShorterBackendTTL(t *testing.T) {
-	// Regression for the biometric/SA default acting as a silent ceiling:
-	// an 8h project TTL must win over a 10m backend suggestion.
-	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	clock := func() time.Time { return now }
-
-	mock := &backendtest.Mock{ValueFor: map[string]string{"X": "v"}, TTL: 10 * time.Minute}
-	srv := &Server{Cache: cache.New(clock), Backend: mock}
-	conn := dialServer(t, srv)
-
-	req := Request{ProjectID: "p", SecretName: "X", AllowedItems: []string{"X"}, TTL: 8 * time.Hour}
-	if err := WriteMessage(conn, req); err != nil {
-		t.Fatal(err)
-	}
-	var resp Response
-	if err := ReadMessage(conn, &resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp.Error != "" {
-		t.Fatalf("unexpected error: %s", resp.Error)
-	}
-
-	now = now.Add(30 * time.Minute) // past backend default, within configured TTL
-	if _, ok := srv.Cache.Get("p\x00X"); !ok {
-		t.Fatal("expected cache hit after backend default TTL; configured 8h TTL should win")
+			now = now.Add(tc.advance)
+			_, hit := srv.Cache.Get("p\x00X")
+			if hit != tc.wantHit {
+				t.Fatalf("cache hit=%v, want %v after %v", hit, tc.wantHit, tc.advance)
+			}
+		})
 	}
 }
 

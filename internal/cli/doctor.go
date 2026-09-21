@@ -5,9 +5,11 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/newtosh/timeshare/internal/client"
 	"github.com/newtosh/timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/onepassword"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -17,6 +19,10 @@ var (
 	passStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
 	failStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 )
+
+// Seams so doctor existence checks are unit-testable without shelling to op.
+var doctorGetItem = onepassword.GetItem
+var doctorGetSSHFingerprint = onepassword.GetItemFingerprint
 
 func newDoctorCmd() *cobra.Command {
 	return &cobra.Command{
@@ -70,29 +76,8 @@ func newDoctorCmd() *cobra.Command {
 				}
 			}
 
-			// Metadata-only existence checks — catch typos before mid-run.
-			if len(cfg.Items) > 0 {
-				itemErrs := verifyConfiguredItems(cfg)
-				if len(itemErrs) == 0 {
-					fmt.Println(passStyle.Render(fmt.Sprintf("✓ %d configured item(s) exist in vault", len(cfg.Items))))
-				} else {
-					for _, err := range itemErrs {
-						fmt.Println(failStyle.Render("✗ configured item") + ": " + err.Error())
-						failed++
-					}
-				}
-			}
-			if len(cfg.SSHKeys) > 0 {
-				sshErrs := verifyConfiguredSSHKeys(cfg.SSHKeys)
-				if len(sshErrs) == 0 {
-					fmt.Println(passStyle.Render(fmt.Sprintf("✓ %d configured ssh_key(s) resolve", len(cfg.SSHKeys))))
-				} else {
-					for _, err := range sshErrs {
-						fmt.Println(failStyle.Render("✗ configured ssh_key") + ": " + err.Error())
-						failed++
-					}
-				}
-			}
+			failed += reportRefs("configured item", "exist in vault", len(cfg.Items), verifyConfiguredItems(cfg))
+			failed += reportRefs("configured ssh_key", "resolve", len(cfg.SSHKeys), verifyConfiguredSSHKeys(cfg.SSHKeys))
 
 			if failed > 0 {
 				return fmt.Errorf("%d check(s) failed", failed)
@@ -100,6 +85,21 @@ func newDoctorCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// reportRefs prints one pass line or per-error fail lines. n==0 skips.
+func reportRefs(kind, passVerb string, n int, errs []error) int {
+	if n == 0 {
+		return 0
+	}
+	if len(errs) == 0 {
+		fmt.Println(passStyle.Render(fmt.Sprintf("✓ %d %s(s) %s", n, kind, passVerb)))
+		return 0
+	}
+	for _, err := range errs {
+		fmt.Println(failStyle.Render("✗ "+kind) + ": " + err.Error())
+	}
+	return len(errs)
 }
 
 // check runs fn, prints a pass/fail line, and reports whether it passed.
@@ -110,4 +110,35 @@ func check(name string, fn func() error) bool {
 	}
 	fmt.Println(passStyle.Render("✓ " + name))
 	return true
+}
+
+// verifyConfiguredItems returns one error per missing/unresolvable item
+// in cfg.Vault. Metadata only — does not read secret values.
+func verifyConfiguredItems(cfg config.Config) []error {
+	var errs []error
+	for _, item := range cfg.Items {
+		if _, err := doctorGetItem(cfg.Vault, item); err != nil {
+			errs = append(errs, fmt.Errorf("item %q in vault %q: %w", item, cfg.Vault, err))
+		}
+	}
+	return errs
+}
+
+// verifyConfiguredSSHKeys returns one error per bad ssh_keys ref
+// (<vault>/<item>). Uses the fingerprint field so non-SSH-Key items fail
+// here instead of mid-run.
+func verifyConfiguredSSHKeys(refs []string) []error {
+	var errs []error
+	for _, ref := range refs {
+		idx := strings.LastIndex(ref, "/")
+		if idx < 0 {
+			errs = append(errs, fmt.Errorf("ssh_key %q must be in <vault>/<item> form", ref))
+			continue
+		}
+		vault, item := ref[:idx], ref[idx+1:]
+		if _, err := doctorGetSSHFingerprint(vault, item); err != nil {
+			errs = append(errs, fmt.Errorf("ssh_key %q: %w", ref, err))
+		}
+	}
+	return errs
 }

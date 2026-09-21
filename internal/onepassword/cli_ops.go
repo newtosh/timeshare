@@ -204,9 +204,6 @@ const DefaultSecretField = "password"
 // vault/item as separate argv — not an op:// URI — so titles containing
 // "/" or spaces resolve correctly (same approach as GetItemFingerprint).
 func ReadField(vault, item, field string) (string, error) {
-	if field == "" {
-		field = DefaultSecretField
-	}
 	out, err := runOp("item", "get", item, "--vault="+vault, "--fields", "label="+field, "--reveal", "--format=json")
 	if err != nil {
 		return "", err
@@ -227,13 +224,5 @@ func ReadField(vault, item, field string) (string, error) {
 // path-escaping the item segment so titles with "/" or spaces don't
 // break the reference grammar.
 func SecretReference(vault, item, field string) string {
-	if field == "" {
-		field = DefaultSecretField
-	}
-	return "op://" + vault + "/" + secretRefSegment(item) + "/" + secretRefSegment(field)
-}
-
-func secretRefSegment(s string) string {
-	// PathEscape leaves unreserved chars alone and encodes / as %2F.
-	return url.PathEscape(s)
+	return "op://" + vault + "/" + url.PathEscape(item) + "/" + url.PathEscape(field)
 }
