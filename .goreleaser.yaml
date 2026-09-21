@@ -84,6 +84,11 @@ homebrew_casks:
 
       You also need the 1Password CLI (`op`) installed and signed in:
         https://developer.1password.com/docs/cli/get-started/
+
+      Release binaries are not Apple-notarized. Install clears the
+      Gatekeeper quarantine attribute so first launch is not blocked;
+      that weakens quarantine for these two binaries until we ship
+      signed builds.
     hooks:
       # Refuse if a go-install copy is already first on PATH.
       pre:
@@ -109,9 +114,9 @@ homebrew_casks:
             EOS
           end
       post:
-        # Binaries are not Apple-notarized; clear Gatekeeper quarantine so
-        # first launch is not blocked. Prefer code signing later if this
-        # becomes painful for users.
+        # Keep clearing quarantine until notarized builds ship (explicit
+        # product choice: first-launch UX over Gatekeeper on these two
+        # unsigned CLI binaries). Documented in caveats above.
         install: |
           if OS.mac?
             system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/timeshare"]
