@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -17,11 +18,18 @@ import (
 	"github.com/newtosh/timeshare/internal/config"
 	"github.com/newtosh/timeshare/internal/daemon"
 	"github.com/newtosh/timeshare/internal/tokenstore"
+	"github.com/newtosh/timeshare/internal/version"
 )
 
 func main() {
 	sockPath := flag.String("socket", "", "unix socket path to listen on")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version.String())
+		return
+	}
 
 	if *sockPath == "" {
 		log.Fatal("timesharedd: --socket is required")

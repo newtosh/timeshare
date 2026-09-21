@@ -51,6 +51,12 @@ Both land in `$(go env GOPATH)/bin` — make sure that's on your `PATH`.
 `timesharedd` never needs to be started by hand — `timeshare` auto-spawns
 it on first use, the way `ssh-agent` works.
 
+Tagged releases (`vMAJOR.MINOR.PATCH`) publish linux/darwin amd64+arm64
+binaries on the [GitHub Releases](https://github.com/newtosh/timeshare/releases)
+page. `go install …@latest` resolves to the newest tag; pin a version with
+`@v0.1.0` (or whatever the current release is). Check what you have with
+`timeshare --version`.
+
 You'll also need the [1Password CLI](https://developer.1password.com/docs/cli/)
 (`op`) installed and signed in.
 
@@ -169,6 +175,7 @@ that excludes repos you run through timeshare.
 
 | Command | What it does |
 |---|---|
+| `timeshare --version` | Print embedded semver / commit / build date |
 | `timeshare init` | Scaffold a dedicated vault + `.timeshare.yml` for the current repo |
 | `timeshare read <name>` | Resolve one secret, print to stdout (drop-in for `op read`) |
 | `timeshare run -- <cmd>` | Resolve every item in `.timeshare.yml`, inject as env vars, exec `<cmd>` |
