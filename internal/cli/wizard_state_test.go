@@ -96,7 +96,14 @@ func TestValidateCompleteRejectsMissingVault(t *testing.T) {
 func TestValidateCompleteRejectsNoItemSource(t *testing.T) {
 	s := &wizardState{Vault: "v", TTL: "4h"}
 	if err := s.validateComplete(); err == nil {
-		t.Fatal("expected error when no --item/--from/--from-item given")
+		t.Fatal("expected error when no --item/--from/--from-item/--ssh-key given")
+	}
+}
+
+func TestValidateCompleteAcceptsSSHKeysOnly(t *testing.T) {
+	s := &wizardState{Vault: "v", TTL: "4h", SSHKeys: []string{"Private/deploy-key"}}
+	if err := s.validateComplete(); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
 	}
 }
 

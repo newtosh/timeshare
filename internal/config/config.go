@@ -57,8 +57,8 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("config field ttl invalid: %w", err)
 	}
 
-	if len(raw.Items) == 0 {
-		return Config{}, fmt.Errorf("config must list at least one item under items")
+	if len(raw.Items) == 0 && len(raw.SSHKeys) == 0 {
+		return Config{}, fmt.Errorf("config must list at least one entry under items or ssh_keys")
 	}
 
 	return Config{Vault: raw.Vault, Mode: mode, TTL: ttl, Items: raw.Items, SSHKeys: raw.SSHKeys}, nil

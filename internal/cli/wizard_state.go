@@ -61,8 +61,8 @@ func (s *wizardState) validateComplete() error {
 	if s.Vault == "" {
 		return fmt.Errorf("--vault is required (e.g. --vault=project-x-secrets)")
 	}
-	if s.FromVault == "" && len(s.Items) == 0 && len(s.FromItems) == 0 {
-		return fmt.Errorf("at least one of --from, --item, or --from-item is required (a config with an empty items list will never load)")
+	if s.FromVault == "" && len(s.Items) == 0 && len(s.FromItems) == 0 && len(s.SSHKeys) == 0 {
+		return fmt.Errorf("at least one of --from, --item, --from-item, or --ssh-key is required")
 	}
 	if _, err := time.ParseDuration(s.TTL); err != nil {
 		return fmt.Errorf("invalid --ttl: %w", err)

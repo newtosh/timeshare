@@ -162,14 +162,9 @@ func runWizard(cwd string, seeded *wizardState) (*wizardState, error) {
 			return nil, fmt.Errorf("listing items in %s: %w", sourceVault, err)
 		}
 
-		// An empty items list is never a valid end state for this tool
-		// (see validateComplete): requireOne=true makes pickItems itself
-		// block enter until at least one item is checked, instead of us
-		// looping and re-running the picker (which used to spin up a
-		// brand new tea.Program on an empty submit — since it's inline,
-		// not alt-screen, that visibly reprinted the whole list below
-		// what was already on screen).
-		picked, err := pickItems(sourceVault, sourceItems, true)
+		// Empty items is OK when ssh_keys will be set (ssh-only repos).
+		// validateComplete / config.Load still require items or ssh_keys.
+		picked, err := pickItems(sourceVault, sourceItems, false)
 		if err != nil {
 			return nil, fmt.Errorf("picking items from %s: %w", sourceVault, err)
 		}
