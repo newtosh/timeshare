@@ -54,7 +54,7 @@ it on first use, the way `ssh-agent` works.
 Tagged releases (`vMAJOR.MINOR.PATCH`) publish linux/darwin amd64+arm64
 binaries on the [GitHub Releases](https://github.com/newtosh/timeshare/releases)
 page. `go install …@latest` resolves to the newest tag; pin a version with
-`@v0.1.0` (or whatever the current release is). Check what you have with
+`@v0.1.2` (or whatever the current release is). Check what you have with
 `timeshare --version`.
 
 You'll also need the [1Password CLI](https://developer.1password.com/docs/cli/)

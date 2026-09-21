@@ -42,7 +42,7 @@ mergeable (branch protection's `strict` status-check setting).
 ## Releasing
 
 Versions follow [semver](https://semver.org/) as annotated git tags
-`vMAJOR.MINOR.PATCH` (e.g. `v0.1.0`). While the project is early /
+`vMAJOR.MINOR.PATCH` (e.g. `v0.1.2`). While the project is early /
 pre-1.0, breaking changes may land in minor bumps; once `v1.0.0` ships,
 breaking changes require a major bump.
 
@@ -50,8 +50,8 @@ Cutting a release (from an up-to-date `main`, after CI is green):
 
 ```sh
 git checkout main && git pull
-git tag -a v0.1.0 -m "timeshare v0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.2 -m "timeshare v0.1.2"
+git push origin v0.1.2
 ```
 
 Pushing the tag runs `.github/workflows/release.yml` (GoReleaser), which
@@ -59,8 +59,8 @@ builds linux/darwin amd64+arm64 binaries for `timeshare` and `timesharedd`,
 attaches them to a GitHub Release, and embeds the tag/commit/date into
 `--version` output via ldflags.
 
-Do not retag or force-push an existing version tag — publish `v0.1.1`
-(or whatever the next patch is) instead.
+Do not retag or force-push an existing version tag — publish the next
+patch (e.g. `v0.1.3`) instead.
 
 ## Project layout
 
