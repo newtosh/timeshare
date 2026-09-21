@@ -39,19 +39,20 @@ func newRunCmd() *cobra.Command {
 			}
 
 			env := os.Environ()
-			for _, name := range cfg.Items {
+			for _, item := range cfg.Items {
 				value, err := c.Read(cmd.Context(), daemon.Request{
 					ProjectID:    projectID,
-					SecretName:   name,
+					SecretName:   item.Name,
 					Vault:        cfg.Vault,
 					Mode:         cfg.Mode,
 					TTL:          cfg.TTL,
-					AllowedItems: cfg.Items,
+					Field:        item.Field,
+					AllowedItems: cfg.ItemNames(),
 				})
 				if err != nil {
-					return fmt.Errorf("resolving %s: %w", name, err)
+					return fmt.Errorf("resolving %s: %w", item.Name, err)
 				}
-				env = append(env, name+"="+value)
+				env = append(env, item.Name+"="+value)
 			}
 
 			cleanup := func() {}

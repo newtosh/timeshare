@@ -35,7 +35,7 @@ func (b *OnePasswordServiceAccount) Resolve(ctx context.Context, cfg config.Conf
 		return "", 0, fmt.Errorf("%w: %w", ErrAuthFailed, err)
 	}
 
-	reference := opcli.SecretReference(cfg.Vault, secretName, opcli.DefaultSecretField)
+	reference := opcli.SecretReference(cfg.Vault, secretName, secretField(cfg, secretName))
 	value, err := client.Secrets().Resolve(ctx, reference)
 	if err != nil {
 		return "", 0, fmt.Errorf("%w: %w", ErrItemNotFound, err)

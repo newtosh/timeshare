@@ -23,7 +23,7 @@ func TestRenderBreadcrumbShowsDoneStepsWithValue(t *testing.T) {
 func TestRenderBreadcrumbJoinsStepsWithSeparator(t *testing.T) {
 	steps := []wizardStep{
 		{Label: "Repo vault name", Done: true, Value: "x"},
-		{Label: "Items to move", Done: false},
+		{Label: "Items to copy", Done: false},
 		{Label: "TTL", Done: false},
 	}
 	out := renderBreadcrumb(steps, 1)

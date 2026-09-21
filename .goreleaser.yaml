@@ -89,39 +89,47 @@ homebrew_casks:
       Gatekeeper quarantine attribute so first launch is not blocked;
       that weakens quarantine for these two binaries until we ship
       signed builds.
-    hooks:
+    # GoReleaser hooks still emit legacy preflight/postflight; Homebrew
+    # wants declarative *_steps (third-party taps warn on the old form).
+    # Emit steps via custom_block until GoReleaser grows native keys.
+    custom_block: |
       # Refuse if a go-install copy is already first on PATH.
-      pre:
-        install: |
-          %w[timeshare timesharedd].each do |name|
-            path = which(name)&.to_s
-            next if path.nil?
+      preflight_steps do
+        run "/bin/sh", args: [
+          "-c",
+          <<~'SH'
+            for name in timeshare timesharedd; do
+              path=$(command -v "$name" 2>/dev/null) || continue
+              # Intel Homebrew puts a symlink at /usr/local/bin; resolve so
+              # Cellar/Caskroom paths match (PATH entry alone would not).
+              resolved=$(ruby -e 'begin; puts File.realpath(ARGV[0]); rescue; puts ARGV[0]; end' "$path")
+              case "$resolved" in
+                */Cellar/*|*/Caskroom/*|*/opt/homebrew/*|*/Homebrew/*|*/homebrew/*|*/linuxbrew/*) continue ;;
+              esac
+              case "$path" in
+                */Cellar/*|*/Caskroom/*|*/opt/homebrew/*|*/Homebrew/*|*/homebrew/*|*/linuxbrew/*) continue ;;
+              esac
+              printf '%s at %s is not from Homebrew and would shadow this cask.\n' "$name" "$path" >&2
+              printf 'Remove it, then re-run brew install:\n  rm -f %s\n' "$path" >&2
+              exit 1
+            done
+          SH
+        ]
+      end
 
-            # Intel Homebrew puts a symlink at /usr/local/bin; resolve so
-            # Cellar/Caskroom paths match (PATH entry alone would not).
-            resolved = begin
-              Pathname.new(path).realpath.to_s
-            rescue Errno::ENOENT
-              path
-            end
-            homebrew = %r{/(Cellar|Caskroom|opt/homebrew|Homebrew|homebrew|linuxbrew)/}
-            next if resolved.match?(homebrew) || path.match?(homebrew)
-
-            odie <<~EOS
-              #{name} at #{path} is not from Homebrew and would shadow this cask.
-              Remove it, then re-run brew install:
-                rm -f #{path}
-            EOS
-          end
-      post:
-        # Keep clearing quarantine until notarized builds ship (explicit
-        # product choice: first-launch UX over Gatekeeper on these two
-        # unsigned CLI binaries). Documented in caveats above.
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/timeshare"]
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/timesharedd"]
-          end
+      # Keep clearing quarantine until notarized builds ship (explicit
+      # product choice: first-launch UX over Gatekeeper on these two
+      # unsigned CLI binaries). Documented in caveats above.
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr",
+              args: ["-dr", "com.apple.quarantine", "{{staged_path}}/timeshare"],
+              must_succeed: false
+          run "/usr/bin/xattr",
+              args: ["-dr", "com.apple.quarantine", "{{staged_path}}/timesharedd"],
+              must_succeed: false
+        end
+      end
     repository:
       owner: newtosh
       name: homebrew-tap

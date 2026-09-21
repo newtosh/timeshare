@@ -15,7 +15,7 @@ import (
 // checked, so this never returns an empty slice on success.
 func pickItems(sourceVault string, vaultItems []onepassword.Item, requireOne bool) ([]onepassword.Item, error) {
 	return pickMulti(sourceVault, vaultItems, requireOne,
-		fmt.Sprintf("Select items to move from %q", sourceVault),
+		fmt.Sprintf("Select items to copy from %q", sourceVault),
 		"item picker",
 		true,  // print "skipping" on empty selection
 		false, // empty vaultItems is an error

@@ -19,7 +19,7 @@ type Config struct {
 	Vault   string        `yaml:"vault"`
 	Mode    Mode          `yaml:"mode"`
 	TTL     time.Duration `yaml:"ttl"`
-	Items   []string      `yaml:"items"`
+	Items   []Item        `yaml:"items"`
 	SSHKeys []string      `yaml:"ssh_keys,omitempty"`
 }
 
@@ -27,7 +27,7 @@ type rawConfig struct {
 	Vault   string   `yaml:"vault"`
 	Mode    string   `yaml:"mode"`
 	TTL     string   `yaml:"ttl"`
-	Items   []string `yaml:"items"`
+	Items   []Item   `yaml:"items"`
 	SSHKeys []string `yaml:"ssh_keys,omitempty"`
 }
 
@@ -87,7 +87,7 @@ func Write(path string, cfg Config) error {
 // Allows reports whether secretName is in this config's item allow-list.
 func (c Config) Allows(secretName string) bool {
 	for _, item := range c.Items {
-		if item == secretName {
+		if item.Name == secretName {
 			return true
 		}
 	}

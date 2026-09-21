@@ -29,3 +29,27 @@ func TestBiometricResolveUsesReadField(t *testing.T) {
 		t.Fatalf("readField args = %q %q %q", gotVault, gotItem, gotField)
 	}
 }
+
+func TestBiometricResolveUsesConfiguredField(t *testing.T) {
+	orig := readField
+	t.Cleanup(func() { readField = orig })
+
+	var gotField string
+	readField = func(vault, item, field string) (string, error) {
+		gotField = field
+		return "token", nil
+	}
+
+	b := NewOnePasswordBiometric()
+	cfg := config.Config{
+		Vault: "v",
+		Mode:  config.ModeBiometric,
+		Items: []config.Item{{Name: "sbg-engtools.gen", Field: "notesPlain"}},
+	}
+	if _, _, err := b.Resolve(t.Context(), cfg, "sbg-engtools.gen"); err != nil {
+		t.Fatal(err)
+	}
+	if gotField != "notesPlain" {
+		t.Fatalf("got field %q, want notesPlain", gotField)
+	}
+}

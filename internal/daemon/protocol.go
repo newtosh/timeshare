@@ -14,13 +14,17 @@ import (
 // alongside the request. The daemon enforces AllowedItems regardless of
 // what the underlying 1Password vault grant would permit (spec: Goals).
 type Request struct {
-	ProjectID    string        `json:"project_id"`
-	SecretName   string        `json:"secret_name"`
-	Vault        string        `json:"vault"`
-	Mode         config.Mode   `json:"mode"`
-	TTL          time.Duration `json:"ttl"`
-	AllowedItems []string      `json:"allowed_items"`
-	Op           Op            `json:"op,omitempty"`
+	ProjectID  string        `json:"project_id"`
+	SecretName string        `json:"secret_name"`
+	Vault      string        `json:"vault"`
+	Mode       config.Mode   `json:"mode"`
+	TTL        time.Duration `json:"ttl"`
+	// Field is the 1Password item field to read. Empty means the Login
+	// default ("password"). Set from .timeshare.yml's per-item field
+	// override so Secure Notes / custom fields resolve correctly.
+	Field        string   `json:"field,omitempty"`
+	AllowedItems []string `json:"allowed_items"`
+	Op           Op       `json:"op,omitempty"`
 }
 
 // Op selects which operation the daemon performs for a Request. The zero

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/newtosh/timeshare/internal/config"
 	"github.com/newtosh/timeshare/internal/onepassword"
 )
 
@@ -26,6 +27,14 @@ func withFakeTransferItems(t *testing.T, failOnCall int, failErr error) {
 	t.Cleanup(func() { moveItem, copyItem = origMove, origCopy })
 }
 
+func itemNames(items []config.Item) []string {
+	names := make([]string, len(items))
+	for i, it := range items {
+		names[i] = it.Name
+	}
+	return names
+}
+
 func TestTransferIntoAllSucceed(t *testing.T) {
 	withFakeTransferItems(t, 0, nil)
 	picked := []onepassword.Item{{ID: "1", Title: "A"}, {ID: "2", Title: "B"}}
@@ -35,7 +44,7 @@ func TestTransferIntoAllSucceed(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	want := []string{"A", "B"}
-	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+	if names := itemNames(got); len(names) != len(want) || names[0] != want[0] || names[1] != want[1] {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 }
@@ -50,7 +59,7 @@ func TestTransferIntoPartialFailureReturnsDoneSoFar(t *testing.T) {
 		t.Fatal("expected an error from the failing 2nd transfer")
 	}
 	// Item A transferred before the failure on B; C was never attempted.
-	if len(got) != 1 || got[0] != "A" {
+	if names := itemNames(got); len(names) != 1 || names[0] != "A" {
 		t.Fatalf("expected partial result [A], got %v", got)
 	}
 }
@@ -59,11 +68,11 @@ func TestTransferIntoPreservesAlreadyDone(t *testing.T) {
 	withFakeTransferItems(t, 0, nil)
 	picked := []onepassword.Item{{ID: "2", Title: "B"}}
 
-	got, err := transferInto("dest", "src", picked, []string{"A"}, false)
+	got, err := transferInto("dest", "src", picked, []config.Item{{Name: "A"}}, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(got) != 2 || got[0] != "A" || got[1] != "B" {
+	if names := itemNames(got); len(names) != 2 || names[0] != "A" || names[1] != "B" {
 		t.Fatalf("got %v, want [A B]", got)
 	}
 }
