@@ -39,6 +39,32 @@ mergeable (branch protection's `strict` status-check setting).
   a reviewer making a judgment call, not a lint rule), so it's a manual
   step in the PR process, not a GitHub Actions job.
 
+## Live-testing SSH proxy rejection and TTL
+
+Unit tests in `internal/sshagent` cover allow-list filtering and TTL
+cutoff against an in-memory agent. CLI tools (`ssh-add -L`, `ssh`) only
+see keys the proxy's `List` already filtered — they cannot exercise
+`Sign` rejection for a key that never appears in the list.
+
+To live-check rejection and TTL on a Mac with 1Password's agent:
+
+1. Point a throwaway `.timeshare.yml` at one real SSH key
+   (`ssh_keys: ["Vault/item"]`) with a short `ttl:` (e.g. `30s`).
+2. In one terminal: `timeshare run -- sleep 120` (keeps the proxy alive).
+3. In another: `SSH_AUTH_SOCK=… ssh-add -L` should list only the
+   allow-listed key. Signing with a different key from the upstream agent
+   is only observable via a raw agent client (or by temporarily
+   allow-listing two keys, then removing one from config and restarting
+   `run` — the removed key disappears from `List`).
+4. After `ttl` elapses, further `ssh-add -L` / sign attempts against the
+   still-running proxy should fail (`SSH_AGENT_FAILURE`). Kill the
+   `sleep` when done.
+
+Secret-cache TTL (biometric/`items`) is separate: set `ttl: 8h`,
+`timeshare read ITEM` twice more than 10 minutes apart, and confirm the
+second read does not re-prompt. Automated coverage that configured TTL
+wins over backend defaults lives in `internal/daemon` (`TestConfiguredTTL*`).
+
 ## Releasing
 
 Versions follow [semver](https://semver.org/) as annotated git tags

@@ -93,30 +93,18 @@ func upstreamAgentSocketPath() string {
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
 		return sock
 	}
-	candidates := onePasswordAgentSocketCandidates()
-	for _, path := range candidates {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	desktop := filepath.Join(home, "Library", "Group Containers", "2BUA8C4S2C.com.1password", "t", "agent.sock")
+	cliPath := filepath.Join(home, ".1password", "agent.sock")
+	for _, path := range []string{desktop, cliPath} {
 		if st, err := os.Stat(path); err == nil && !st.IsDir() {
 			return path
 		}
 	}
-	if len(candidates) > 0 {
-		return candidates[len(candidates)-1]
-	}
-	return ""
-}
-
-// onePasswordAgentSocketCandidates lists known 1Password SSH agent
-// socket locations, preferred first. The macOS desktop app keeps the
-// agent under Group Containers; CLI-oriented installs use ~/.1password.
-func onePasswordAgentSocketCandidates() []string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return nil
-	}
-	return []string{
-		filepath.Join(home, "Library", "Group Containers", "2BUA8C4S2C.com.1password", "t", "agent.sock"),
-		filepath.Join(home, ".1password", "agent.sock"),
-	}
+	return cliPath
 }
 
 // sshProxySocketDir returns where to place the proxy's own temp socket:

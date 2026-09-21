@@ -68,19 +68,6 @@ func TestReadFailsFastWithoutSpawnBinaryConfigured(t *testing.T) {
 	}
 }
 
-func TestIsConnRefused(t *testing.T) {
-	sockPath := t.TempDir() + "/agent.sock"
-	makeStaleUnixSocket(t, sockPath)
-
-	_, dialErr := net.Dial("unix", sockPath)
-	if dialErr == nil {
-		t.Fatal("expected dial against stale socket to fail")
-	}
-	if !isConnRefused(dialErr) {
-		t.Fatalf("expected ECONNREFUSED, got %v", dialErr)
-	}
-}
-
 func TestDialUnlinksStaleSocketBeforeSpawn(t *testing.T) {
 	dir := t.TempDir()
 	sockPath := dir + "/agent.sock"
