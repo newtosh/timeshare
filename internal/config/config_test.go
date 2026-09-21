@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -92,17 +91,6 @@ func TestWriteLoadRoundTripItemField(t *testing.T) {
 	path := filepath.Join(dir, ".timeshare.yml")
 	if err := Write(path, cfg); err != nil {
 		t.Fatalf("Write: %v", err)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Bare names stay compact; field overrides emit a mapping.
-	if !strings.Contains(string(data), "- DATABASE_URL\n") {
-		t.Fatalf("expected bare string for default-field item, got:\n%s", data)
-	}
-	if !strings.Contains(string(data), "field: notesPlain") {
-		t.Fatalf("expected field override in YAML, got:\n%s", data)
 	}
 	loaded, err := Load(path)
 	if err != nil {

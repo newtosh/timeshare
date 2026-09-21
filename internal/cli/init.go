@@ -85,7 +85,10 @@ func runInit(cwd string, s *wizardState) error {
 		return fmt.Errorf("creating vault: %w", err)
 	}
 
-	items := config.ItemsFromNames(s.Items)
+	items := make([]config.Item, len(s.Items))
+	for i, name := range s.Items {
+		items[i] = config.Item{Name: name}
+	}
 	if s.FromVault != "" {
 		existing, err := onepassword.ListItems(s.FromVault)
 		if err != nil {

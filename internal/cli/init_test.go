@@ -27,14 +27,6 @@ func withFakeTransferItems(t *testing.T, failOnCall int, failErr error) {
 	t.Cleanup(func() { moveItem, copyItem = origMove, origCopy })
 }
 
-func itemNames(items []config.Item) []string {
-	names := make([]string, len(items))
-	for i, it := range items {
-		names[i] = it.Name
-	}
-	return names
-}
-
 func TestTransferIntoAllSucceed(t *testing.T) {
 	withFakeTransferItems(t, 0, nil)
 	picked := []onepassword.Item{{ID: "1", Title: "A"}, {ID: "2", Title: "B"}}
@@ -43,9 +35,9 @@ func TestTransferIntoAllSucceed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := []string{"A", "B"}
-	if names := itemNames(got); len(names) != len(want) || names[0] != want[0] || names[1] != want[1] {
-		t.Fatalf("got %v, want %v", got, want)
+	names := config.Config{Items: got}.ItemNames()
+	if len(names) != 2 || names[0] != "A" || names[1] != "B" {
+		t.Fatalf("got %v, want [A B]", got)
 	}
 }
 
@@ -59,7 +51,8 @@ func TestTransferIntoPartialFailureReturnsDoneSoFar(t *testing.T) {
 		t.Fatal("expected an error from the failing 2nd transfer")
 	}
 	// Item A transferred before the failure on B; C was never attempted.
-	if names := itemNames(got); len(names) != 1 || names[0] != "A" {
+	names := config.Config{Items: got}.ItemNames()
+	if len(names) != 1 || names[0] != "A" {
 		t.Fatalf("expected partial result [A], got %v", got)
 	}
 }
@@ -72,7 +65,8 @@ func TestTransferIntoPreservesAlreadyDone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if names := itemNames(got); len(names) != 2 || names[0] != "A" || names[1] != "B" {
+	names := config.Config{Items: got}.ItemNames()
+	if len(names) != 2 || names[0] != "A" || names[1] != "B" {
 		t.Fatalf("got %v, want [A B]", got)
 	}
 }

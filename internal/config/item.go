@@ -54,19 +54,7 @@ func (i Item) MarshalYAML() (any, error) {
 	if i.Field == "" {
 		return i.Name, nil
 	}
-	return struct {
-		Name  string `yaml:"name"`
-		Field string `yaml:"field"`
-	}{Name: i.Name, Field: i.Field}, nil
-}
-
-// ItemsFromNames builds Items with no field overrides (init / flag path).
-func ItemsFromNames(names []string) []Item {
-	out := make([]Item, len(names))
-	for i, name := range names {
-		out[i] = Item{Name: name}
-	}
-	return out
+	return map[string]string{"name": i.Name, "field": i.Field}, nil
 }
 
 // ItemNames returns just the allow-list names (daemon protocol, env keys).

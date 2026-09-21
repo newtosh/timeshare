@@ -126,7 +126,7 @@ func TestBackendErrorIsSurfacedNotCached(t *testing.T) {
 	if resp.Error == "" {
 		t.Fatal("expected error surfaced to caller")
 	}
-	if _, ok := srv.Cache.Get("p\x00X\x00"); ok {
+	if _, ok := srv.Cache.Get("p\x00X"); ok {
 		t.Fatal("a failed resolve must not populate the cache")
 	}
 }
@@ -202,7 +202,7 @@ func TestConfiguredTTLWins(t *testing.T) {
 			}
 
 			now = now.Add(tc.advance)
-			_, hit := srv.Cache.Get("p\x00X\x00")
+			_, hit := srv.Cache.Get("p\x00X")
 			if hit != tc.wantHit {
 				t.Fatalf("cache hit=%v, want %v after %v", hit, tc.wantHit, tc.advance)
 			}
@@ -246,7 +246,7 @@ func TestLockEvictsProjectCache(t *testing.T) {
 		t.Fatalf("unexpected error: %s", lockResp.Error)
 	}
 
-	if _, ok := srv.Cache.Get("p\x00X\x00"); ok {
+	if _, ok := srv.Cache.Get("p\x00X"); ok {
 		t.Fatal("expected cache evicted after lock")
 	}
 }

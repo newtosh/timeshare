@@ -103,10 +103,7 @@ homebrew_casks:
               # Intel Homebrew puts a symlink at /usr/local/bin; resolve so
               # Cellar/Caskroom paths match (PATH entry alone would not).
               resolved=$(ruby -e 'begin; puts File.realpath(ARGV[0]); rescue; puts ARGV[0]; end' "$path")
-              case "$resolved" in
-                */Cellar/*|*/Caskroom/*|*/opt/homebrew/*|*/Homebrew/*|*/homebrew/*|*/linuxbrew/*) continue ;;
-              esac
-              case "$path" in
+              case "$resolved $path" in
                 */Cellar/*|*/Caskroom/*|*/opt/homebrew/*|*/Homebrew/*|*/homebrew/*|*/linuxbrew/*) continue ;;
               esac
               printf '%s at %s is not from Homebrew and would shadow this cask.\n' "$name" "$path" >&2
