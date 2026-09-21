@@ -266,11 +266,10 @@ pre-commit/pre-push hooks, and workflow conventions.
   read re-prompts. Planned as a follow-up once the in-memory version has
   seen real use (see the design spec in `docs/superpowers/specs/`).
 - Windows isn't supported (Unix socket IPC).
-- `read`/`run` only resolve Login-category items — the field is hardcoded
-  to `password` when building the `op://` reference, so Secure Notes and
-  items with custom fields aren't usable yet. Item titles containing `/`
-  or other characters `op` treats specially in a secret reference can also
-  fail to resolve; referencing by item ID works around it in the meantime.
+- `read`/`run` only resolve the Login `password` field (hardcoded). Secure
+  Notes and custom fields aren't configurable yet. Item titles with `/`
+  or spaces are fine — biometric mode uses `op item get` argv, and
+  service-account mode path-escapes the secret reference.
 - `timeshare doctor`'s SSH check confirms the upstream agent socket is
   reachable; it doesn't detect an `~/.ssh/config` `IdentityAgent`
   override that would silently bypass the proxy (see [SSH key

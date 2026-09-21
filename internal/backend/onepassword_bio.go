@@ -1,20 +1,22 @@
 package backend
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/newtosh/timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/onepassword"
 )
 
 // defaultBiometricTTL is the fallback cache duration when a resolve
-// request carries no TTL of its own. It is not a ceiling on configured
-// project TTLs — those win in the daemon (see server.resolve).
+// request carries no TTL of its own. Configured project TTLs win in the
+// daemon; this is not a ceiling.
 const defaultBiometricTTL = 10 * time.Minute
+
+// readField is a seam over onepassword.ReadField for unit tests.
+var readField = onepassword.ReadField
 
 type OnePasswordBiometric struct{}
 
@@ -23,20 +25,16 @@ func NewOnePasswordBiometric() *OnePasswordBiometric {
 }
 
 func (b *OnePasswordBiometric) Resolve(ctx context.Context, cfg config.Config, secretName string) (string, time.Duration, error) {
-	reference := fmt.Sprintf("op://%s/%s/password", cfg.Vault, secretName)
-
-	cmd := exec.CommandContext(ctx, "op", "read", reference) //nolint:gosec // fixed binary name "op"; this IS the app's job (shell out to the 1Password CLI)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		msg := stderr.String()
-		if strings.Contains(msg, "not found") {
+	_ = ctx
+	// Argv-based op item get (not an op:// URI) so titles with "/" or
+	// spaces resolve correctly — same approach as SSH fingerprint lookup.
+	value, err := readField(cfg.Vault, secretName, onepassword.DefaultSecretField)
+	if err != nil {
+		msg := err.Error()
+		if strings.Contains(msg, "not found") || strings.Contains(msg, "isn't an item") {
 			return "", 0, fmt.Errorf("%w: %s", ErrItemNotFound, msg)
 		}
 		return "", 0, fmt.Errorf("%w: %s", ErrAuthFailed, msg)
 	}
-
-	return strings.TrimRight(stdout.String(), "\n"), defaultBiometricTTL, nil
+	return value, defaultBiometricTTL, nil
 }

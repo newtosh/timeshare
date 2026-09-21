@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os/exec"
 )
 
@@ -193,4 +194,46 @@ func GetItemFingerprint(vault, ref string) (string, error) {
 		return "", fmt.Errorf("item %q in vault %q has no fingerprint field (not an SSH Key item?)", ref, vault)
 	}
 	return raw.Value, nil
+}
+
+// DefaultSecretField is the Login-item field timeshare reads for cached
+// secrets. Non-password fields (notes, custom) are not yet configurable.
+const DefaultSecretField = "password"
+
+// ReadField reads a single field from an item via `op item get` with
+// vault/item as separate argv — not an op:// URI — so titles containing
+// "/" or spaces resolve correctly (same approach as GetItemFingerprint).
+func ReadField(vault, item, field string) (string, error) {
+	if field == "" {
+		field = DefaultSecretField
+	}
+	out, err := runOp("item", "get", item, "--vault="+vault, "--fields", "label="+field, "--reveal", "--format=json")
+	if err != nil {
+		return "", err
+	}
+	var raw struct {
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return "", fmt.Errorf("parsing op item get %s output: %w", field, err)
+	}
+	if raw.Value == "" {
+		return "", fmt.Errorf("item %q in vault %q has no %q field", item, vault, field)
+	}
+	return raw.Value, nil
+}
+
+// SecretReference builds an op://vault/item/field URI for the SDK path,
+// path-escaping the item segment so titles with "/" or spaces don't
+// break the reference grammar.
+func SecretReference(vault, item, field string) string {
+	if field == "" {
+		field = DefaultSecretField
+	}
+	return "op://" + vault + "/" + secretRefSegment(item) + "/" + secretRefSegment(field)
+}
+
+func secretRefSegment(s string) string {
+	// PathEscape leaves unreserved chars alone and encodes / as %2F.
+	return url.PathEscape(s)
 }
