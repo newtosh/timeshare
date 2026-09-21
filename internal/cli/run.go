@@ -84,22 +84,39 @@ func newRunCmd() *cobra.Command {
 	}
 }
 
-// upstreamAgentSocketPath returns where to reach the real SSH agent: the
-// standard SSH_AUTH_SOCK env var if set, else 1Password's own default
-// agent socket path. Checking SSH_AUTH_SOCK first keeps this working for
-// any agent, not just 1Password's; falling back to the well-known
-// 1Password path covers users whose ssh config uses a per-host
-// IdentityAgent override instead of exporting SSH_AUTH_SOCK at all (see
-// the spec's "IdentityAgent precedence gotcha" section).
+// upstreamAgentSocketPath returns where to reach the real SSH agent.
+// Order: SSH_AUTH_SOCK if set, else the first existing well-known
+// 1Password agent socket (macOS desktop Group Containers, then
+// ~/.1password/agent.sock). If none exist yet, returns the traditional
+// ~/.1password path so dial errors still name a concrete location.
 func upstreamAgentSocketPath() string {
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
 		return sock
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
+	candidates := onePasswordAgentSocketCandidates()
+	for _, path := range candidates {
+		if st, err := os.Stat(path); err == nil && !st.IsDir() {
+			return path
+		}
 	}
-	return filepath.Join(home, ".1password", "agent.sock")
+	if len(candidates) > 0 {
+		return candidates[len(candidates)-1]
+	}
+	return ""
+}
+
+// onePasswordAgentSocketCandidates lists known 1Password SSH agent
+// socket locations, preferred first. The macOS desktop app keeps the
+// agent under Group Containers; CLI-oriented installs use ~/.1password.
+func onePasswordAgentSocketCandidates() []string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return nil
+	}
+	return []string{
+		filepath.Join(home, "Library", "Group Containers", "2BUA8C4S2C.com.1password", "t", "agent.sock"),
+		filepath.Join(home, ".1password", "agent.sock"),
+	}
 }
 
 // sshProxySocketDir returns where to place the proxy's own temp socket:

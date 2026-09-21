@@ -23,6 +23,32 @@ func TestUpstreamAgentSocketPathFallsBackTo1Password(t *testing.T) {
 	}
 }
 
+func TestUpstreamAgentSocketPathPrefersMacDesktopAgent(t *testing.T) {
+	t.Setenv("SSH_AUTH_SOCK", "")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	desktop := filepath.Join(home, "Library", "Group Containers", "2BUA8C4S2C.com.1password", "t", "agent.sock")
+	if err := os.MkdirAll(filepath.Dir(desktop), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(desktop, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Also plant the CLI path — desktop must still win when both exist.
+	cliPath := filepath.Join(home, ".1password", "agent.sock")
+	if err := os.MkdirAll(filepath.Dir(cliPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cliPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := upstreamAgentSocketPath(); got != desktop {
+		t.Fatalf("got %q, want desktop agent %q", got, desktop)
+	}
+}
+
 func TestSSHProxySocketDirPrefersXDGRuntimeDir(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", "/run/user/1000")
 	if got := sshProxySocketDir(); got != "/run/user/1000" {
