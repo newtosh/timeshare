@@ -113,6 +113,52 @@ elif ! version_ge "$GO_VERSION" "$MIN_GO_VERSION"; then
 	[ -n "$still_stale" ] && fail "$still_stale"
 fi
 
+GOBIN=$(go env GOPATH)/bin
+
+# timeshare_version BIN: print the first field of `BIN --version` (the
+# semver / describe string), or empty if BIN is missing/unusable.
+timeshare_version() {
+	bin=$1
+	[ -x "$bin" ] || return 0
+	"$bin" --version 2>/dev/null | awk '{ print $1; exit }'
+}
+
+# latest_release_tag: newest v* tag on the public repo, or empty when none
+# exist yet / the lookup fails. Prefer git ls-remote; fall back to the
+# GitHub releases API when git isn't on PATH.
+latest_release_tag() {
+	if command -v git >/dev/null 2>&1; then
+		git ls-remote --tags --refs --sort=-version:refname \
+			"https://github.com/newtosh/timeshare.git" 'v*' 2>/dev/null \
+			| awk -F/ 'NR==1 { print $NF; exit }'
+		return 0
+	fi
+	if command -v curl >/dev/null 2>&1; then
+		curl -fsSL https://api.github.com/repos/newtosh/timeshare/releases/latest 2>/dev/null \
+			| sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+			| head -n1
+	fi
+}
+
+prev_version=$(timeshare_version "$GOBIN/timeshare")
+if [ -z "$prev_version" ] && command -v timeshare >/dev/null 2>&1; then
+	prev_version=$(timeshare --version 2>/dev/null | awk '{ print $1; exit }')
+fi
+
+ref=latest
+ver=dev
+tag=$(latest_release_tag)
+if [ -n "$tag" ]; then
+	ref=$tag
+	ver=$tag
+fi
+
+build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+ldflags="-s -w"
+ldflags="$ldflags -X github.com/newtosh/timeshare/internal/version.Version=${ver}"
+ldflags="$ldflags -X github.com/newtosh/timeshare/internal/version.Commit=none"
+ldflags="$ldflags -X github.com/newtosh/timeshare/internal/version.Date=${build_date}"
+
 # GOPRIVATE (not GOPROXY=direct): even with semver tags, proxy.golang.org can
 # cache a stale resolution briefly after a new tag lands. GOPRIVATE skips both
 # the proxy AND sum.golang.org for this module specifically — GOPROXY=direct
@@ -121,9 +167,20 @@ fi
 # (`git ls-remote` against github.com directly), a real failure point on
 # networks that restrict direct GitHub access. GOPRIVATE avoids that entirely
 # without disabling sumdb globally.
-with_spinner "Installing timeshare and timesharedd..." env GOPRIVATE="$MODULE" go install "${MODULE}/cmd/timeshare@latest" "${MODULE}/cmd/timesharedd@latest"
+with_spinner "Installing timeshare and timesharedd (${ref})..." \
+	env GOPRIVATE="$MODULE" go install -ldflags "$ldflags" \
+	"${MODULE}/cmd/timeshare@${ref}" "${MODULE}/cmd/timesharedd@${ref}"
 
-GOBIN=$(go env GOPATH)/bin
+new_version=$(timeshare_version "$GOBIN/timeshare")
+[ -n "$new_version" ] || new_version=$ver
+
+if [ -z "$prev_version" ]; then
+	info "Installed timeshare ${new_version}"
+elif [ "$prev_version" = "$new_version" ]; then
+	info "timeshare ${new_version} (already up to date)"
+else
+	info "Updated timeshare ${prev_version} -> ${new_version}"
+fi
 
 case ":$PATH:" in
 *":$GOBIN:"*)

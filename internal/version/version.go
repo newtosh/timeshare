@@ -7,7 +7,7 @@ import "fmt"
 
 // These are set by -ldflags, e.g.:
 //
-//	-X github.com/newtosh/timeshare/internal/version.Version=v0.1.2
+//	-X github.com/newtosh/timeshare/internal/version.Version=v0.1.3
 var (
 	Version = "dev"
 	Commit  = "none"
