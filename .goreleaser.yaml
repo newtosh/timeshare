@@ -121,6 +121,9 @@ homebrew_casks:
       # literal {{staged_path}} would abort the release. Emit Go template
       # that prints the Homebrew steps token Homebrew expands at install.
       postflight_steps do
+        # Drop any in-memory timesharedd whose on-disk binary was just
+        # replaced; next CLI use respawns from the new install.
+        terminate_process "timesharedd"
         on_macos do
           run "/usr/bin/xattr",
               args: ["-dr", "com.apple.quarantine", "{{ "{{" }}staged_path{{ "}}" }}/timeshare"],
