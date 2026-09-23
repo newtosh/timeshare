@@ -78,21 +78,31 @@ homebrew_casks:
     description: "Repo-scoped, TTL-cached secret bridge for 1Password"
     directory: Casks
     commit_msg_template: "timeshare {{ .Tag }}"
-    caveats: |
-      timesharedd is spawned automatically by `timeshare` on first use —
-      you do not need to start it by hand.
-
-      You also need the 1Password CLI (`op`) installed and signed in:
-        https://developer.1password.com/docs/cli/get-started/
-
-      Release binaries are not Apple-notarized. Install clears the
-      Gatekeeper quarantine attribute so first launch is not blocked;
-      that weakens quarantine for these two binaries until we ship
-      signed builds.
+    # Caveats live in custom_block (conditional Ruby). GoReleaser's
+    # caveats: key only emits a static heredoc.
     # GoReleaser hooks still emit legacy preflight/postflight; Homebrew
     # wants declarative *_steps (third-party taps warn on the old form).
     # Emit steps via custom_block until GoReleaser grows native keys.
     custom_block: |
+      caveats do
+        <<~EOS
+          timesharedd is spawned automatically by `timeshare` on first use —
+          you do not need to start it by hand.
+        EOS
+        unless which("op")
+          <<~EOS
+            You also need the 1Password CLI (`op`) installed and signed in:
+              https://developer.1password.com/docs/cli/get-started/
+          EOS
+        end
+        <<~EOS
+          Release binaries are not Apple-notarized. Install clears the
+          Gatekeeper quarantine attribute so first launch is not blocked;
+          that weakens quarantine for these two binaries until we ship
+          signed builds.
+        EOS
+      end
+
       # Refuse if a go-install copy is already first on PATH.
       preflight_steps do
         run "/bin/sh", args: [
