@@ -3,17 +3,14 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/newtosh/timeshare/internal/client"
 	"github.com/newtosh/timeshare/internal/daemon"
-	"github.com/newtosh/timeshare/internal/sshagent"
-
-	"golang.org/x/crypto/ssh/agent"
+	"github.com/newtosh/timeshare/internal/trace"
 
 	"github.com/spf13/cobra"
 )
@@ -48,23 +45,37 @@ func newRunCmd() *cobra.Command {
 					TTL:          cfg.TTL,
 					Field:        item.Field,
 					AllowedItems: cfg.ItemNames(),
+					Debug:        trace.Enabled(),
 				})
 				if err != nil {
 					return fmt.Errorf("resolving %s: %w", item.Name, err)
 				}
-				env = append(env, item.Name+"="+value)
+				// Replace, don't append. getenv (OpenSSH, most C programs)
+				// returns the first match, so a second SSH_AUTH_SOCK or
+				// secret variable would be ignored.
+				env = replaceEnv(env, item.Name, value)
 			}
 
-			cleanup := func() {}
 			if len(cfg.SSHKeys) > 0 {
-				sockPath, proxyCleanup, err := startSSHProxy(cfg.SSHKeys, cfg.TTL)
+				trace.Printf("requesting ssh grant project=%s keys=%d ttl=%s", projectID, len(cfg.SSHKeys), cfg.TTL)
+				resp, err := c.Do(cmd.Context(), daemon.Request{
+					Op:        daemon.OpEnsureSSH,
+					ProjectID: projectID,
+					Vault:     cfg.Vault,
+					Mode:      cfg.Mode,
+					TTL:       cfg.TTL,
+					SSHKeys:   cfg.SSHKeys,
+					Debug:     trace.Enabled(),
+				})
 				if err != nil {
 					return fmt.Errorf("starting SSH key proxy: %w", err)
 				}
-				cleanup = proxyCleanup
-				env = append(env, "SSH_AUTH_SOCK="+sockPath)
+				if resp.SocketPath == "" {
+					return fmt.Errorf("starting SSH key proxy: daemon returned no socket")
+				}
+				trace.Printf("ssh auth sock %s expires %s", resp.SocketPath, resp.ExpiresAt.Format(time.RFC3339))
+				env = replaceEnv(env, "SSH_AUTH_SOCK", resp.SocketPath)
 			}
-			defer cleanup()
 
 			child := exec.Command(args[0], args[1:]...) //nolint:gosec // args come from the user's own command line, exactly like `env`/`op run`
 			child.Env = env
@@ -74,8 +85,6 @@ func newRunCmd() *cobra.Command {
 			if err := child.Run(); err != nil {
 				var ee *exec.ExitError
 				if errors.As(err, &ee) {
-					// os.Exit bypasses defer entirely — cleanup must run explicitly on this path
-					cleanup()
 					os.Exit(ee.ExitCode())
 				}
 				return err
@@ -85,81 +94,14 @@ func newRunCmd() *cobra.Command {
 	}
 }
 
-// upstreamAgentSocketPath returns where to reach the real SSH agent.
-// Order: SSH_AUTH_SOCK if set, else the first existing well-known
-// 1Password agent socket (macOS desktop Group Containers, then
-// ~/.1password/agent.sock). If none exist yet, returns the traditional
-// ~/.1password path so dial errors still name a concrete location.
-func upstreamAgentSocketPath() string {
-	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-		return sock
-	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return ""
-	}
-	desktop := filepath.Join(home, "Library", "Group Containers", "2BUA8C4S2C.com.1password", "t", "agent.sock")
-	cliPath := filepath.Join(home, ".1password", "agent.sock")
-	for _, path := range []string{desktop, cliPath} {
-		if st, err := os.Stat(path); err == nil && !st.IsDir() {
-			return path
+// replaceEnv sets key=value, dropping any earlier assignment of key.
+func replaceEnv(env []string, key, value string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(env)+1)
+	for _, e := range env {
+		if !strings.HasPrefix(e, prefix) {
+			out = append(out, e)
 		}
 	}
-	return cliPath
-}
-
-// sshProxySocketDir returns where to place the proxy's own temp socket:
-// $XDG_RUNTIME_DIR if set (the Linux convention for exactly this kind of
-// per-user runtime state), else the OS temp dir.
-func sshProxySocketDir() string {
-	if dir := os.Getenv("XDG_RUNTIME_DIR"); dir != "" {
-		return dir
-	}
-	return os.TempDir()
-}
-
-// startSSHProxy resolves sshKeys to fingerprints, starts a filtering SSH
-// agent proxy on a fresh temp socket bound by ttl, and returns the
-// socket path plus a cleanup func that stops the proxy and removes the
-// socket file. The caller must call cleanup exactly once (e.g. via
-// defer).
-func startSSHProxy(sshKeys []string, ttl time.Duration) (string, func(), error) {
-	upstreamPath := upstreamAgentSocketPath()
-	if upstreamPath == "" {
-		return "", nil, fmt.Errorf("could not determine the upstream SSH agent socket path (set SSH_AUTH_SOCK)")
-	}
-	upstreamConn, err := net.Dial("unix", upstreamPath)
-	if err != nil {
-		return "", nil, fmt.Errorf("connecting to upstream SSH agent at %s: %w", upstreamPath, err)
-	}
-
-	fingerprints, err := sshagent.ResolveFingerprints(sshKeys)
-	if err != nil {
-		_ = upstreamConn.Close()
-		return "", nil, err
-	}
-
-	proxy := sshagent.NewProxy(agent.NewClient(upstreamConn), fingerprints, time.Now().Add(ttl))
-
-	sockPath := filepath.Join(sshProxySocketDir(), fmt.Sprintf("timeshare-ssh-%d-%d.sock", os.Getpid(), time.Now().UnixNano()))
-	ln, err := net.Listen("unix", sockPath)
-	if err != nil {
-		_ = upstreamConn.Close()
-		return "", nil, fmt.Errorf("creating SSH proxy socket: %w", err)
-	}
-	if err := os.Chmod(sockPath, 0o600); err != nil {
-		_ = ln.Close()
-		_ = upstreamConn.Close()
-		_ = os.Remove(sockPath)
-		return "", nil, fmt.Errorf("securing SSH proxy socket: %w", err)
-	}
-
-	go func() { _ = sshagent.Serve(ln, proxy) }()
-
-	cleanup := func() {
-		_ = ln.Close()
-		_ = upstreamConn.Close()
-		_ = os.Remove(sockPath)
-	}
-	return sockPath, cleanup, nil
+	return append(out, prefix+value)
 }

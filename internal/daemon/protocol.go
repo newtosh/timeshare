@@ -24,7 +24,12 @@ type Request struct {
 	// override so Secure Notes / custom fields resolve correctly.
 	Field        string   `json:"field,omitempty"`
 	AllowedItems []string `json:"allowed_items"`
-	Op           Op       `json:"op,omitempty"`
+	// SSHKeys is the project's <vault>/<item> list. Set on OpEnsureSSH.
+	SSHKeys []string `json:"ssh_keys,omitempty"`
+	// Debug asks the daemon to trace op calls and proxied signs for this
+	// process. The CLI sets it from --verbose / TIMESHARE_DEBUG.
+	Debug bool `json:"debug,omitempty"`
+	Op    Op   `json:"op,omitempty"`
 }
 
 // Op selects which operation the daemon performs for a Request. The zero
@@ -33,15 +38,26 @@ type Request struct {
 type Op string
 
 const (
-	OpRead   Op = "" // default/zero value keeps existing Request literals valid
-	OpStatus Op = "status"
-	OpLock   Op = "lock"
+	OpRead      Op = "" // default/zero value keeps existing Request literals valid
+	OpStatus    Op = "status"
+	OpLock      Op = "lock"
+	OpEnsureSSH Op = "ensure_ssh"
 )
 
+// Pass is one cached grant the daemon is holding. Name is an item name
+// or an ssh key ref. The secret value is never included.
+type Pass struct {
+	Kind      string    `json:"kind"`
+	Name      string    `json:"name"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
 type Response struct {
-	Value     string    `json:"value,omitempty"`
-	ExpiresAt time.Time `json:"expires_at,omitempty"`
-	Error     string    `json:"error,omitempty"`
+	Value      string    `json:"value,omitempty"`
+	ExpiresAt  time.Time `json:"expires_at,omitempty"`
+	Error      string    `json:"error,omitempty"`
+	SocketPath string    `json:"socket_path,omitempty"`
+	Passes     []Pass    `json:"passes,omitempty"`
 }
 
 // WriteMessage encodes v as one JSON line.

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/newtosh/timeshare/internal/daemon"
+	"github.com/newtosh/timeshare/internal/trace"
 )
 
 // Client is the CLI's connection to timesharedd.
@@ -28,33 +29,43 @@ type Client struct {
 // speaks a newer request shape (e.g. per-item Field) never silently
 // dials an older timesharedd that would ignore unknown JSON fields.
 func DefaultSocketPath() string {
-	const protocolGen = "p2" // bump when the request wire format gains required fields
+	const protocolGen = "p3" // bump when the request wire format gains a required op (ensure_ssh)
 	if dir := os.Getenv("XDG_RUNTIME_DIR"); dir != "" {
 		return filepath.Join(dir, "timeshare", protocolGen, "agent.sock")
 	}
 	return filepath.Join(os.TempDir(), fmt.Sprintf("timeshare-%d", os.Getuid()), protocolGen, "agent.sock")
 }
 
-// Read sends req to the daemon, spawning it first if the socket is
-// unreachable and DaemonBinary is configured, and returns the resolved
-// secret value.
-func (c *Client) Read(ctx context.Context, req daemon.Request) (string, error) {
+// Do sends req to the daemon, spawning it first if the socket is
+// unreachable and DaemonBinary is configured, and returns the response.
+// A non-empty Response.Error is returned as an error; the response is
+// still populated so callers can read fields alongside the failure.
+func (c *Client) Do(ctx context.Context, req daemon.Request) (daemon.Response, error) {
 	conn, err := c.dial(ctx)
 	if err != nil {
-		return "", fmt.Errorf("connecting to timesharedd: %w", err)
+		return daemon.Response{}, fmt.Errorf("connecting to timesharedd: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
 	if err := daemon.WriteMessage(conn, req); err != nil {
-		return "", fmt.Errorf("sending request: %w", err)
+		return daemon.Response{}, fmt.Errorf("sending request: %w", err)
 	}
 
 	var resp daemon.Response
 	if err := daemon.ReadMessage(conn, &resp); err != nil {
-		return "", fmt.Errorf("reading response: %w", err)
+		return daemon.Response{}, fmt.Errorf("reading response: %w", err)
 	}
 	if resp.Error != "" {
-		return "", errors.New(resp.Error)
+		return resp, errors.New(resp.Error)
+	}
+	return resp, nil
+}
+
+// Read sends req to the daemon and returns the resolved secret value.
+func (c *Client) Read(ctx context.Context, req daemon.Request) (string, error) {
+	resp, err := c.Do(ctx, req)
+	if err != nil {
+		return "", err
 	}
 	return resp.Value, nil
 }
@@ -117,6 +128,12 @@ func (c *Client) spawnDaemon() error {
 	// this short-lived CLI process (ssh-agent-style, spec: Key decisions).
 	cmd.SysProcAttr = detachedSysProcAttr()
 	cmd.Stdout = nil
-	cmd.Stderr = nil
+	// Inherit stderr so a sign failure or a debug trace is visible in the
+	// terminal that started the daemon. Routine logs go through trace and
+	// stay quiet unless tracing is on.
+	cmd.Stderr = os.Stderr
+	if trace.Enabled() && !trace.EnvEnabled() {
+		cmd.Env = append(os.Environ(), "TIMESHARE_DEBUG=1")
+	}
 	return cmd.Start()
 }

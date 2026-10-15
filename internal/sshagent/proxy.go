@@ -11,12 +11,15 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 
 	"github.com/newtosh/timeshare/internal/peercred"
+	"github.com/newtosh/timeshare/internal/trace"
+	"github.com/newtosh/timeshare/internal/usermsg"
 )
 
 // ErrNotSupported is returned by every Proxy method that would manage
@@ -84,12 +87,12 @@ func (p *Proxy) guard(key ssh.PublicKey) error {
 
 // Sign forwards to the upstream agent only if key's fingerprint is
 // allow-listed and the deadline hasn't passed; otherwise it fails
-// without ever contacting upstream.
+// without ever contacting upstream. A failed upstream sign is retried
+// once before the error is returned.
 func (p *Proxy) Sign(key ssh.PublicKey, data []byte) (*ssh.Signature, error) {
-	if err := p.guard(key); err != nil {
-		return nil, err
-	}
-	return p.upstream.Sign(key, data)
+	return p.forward("sign", key, func() (*ssh.Signature, error) {
+		return p.upstream.Sign(key, data)
+	})
 }
 
 // SignWithFlags signs like Sign, but allows the client to request a
@@ -97,10 +100,37 @@ func (p *Proxy) Sign(key ssh.PublicKey, data []byte) (*ssh.Signature, error) {
 // ssh-rsa/SHA-1) — same allow-list and deadline guards as Sign, then
 // forwards to the upstream ExtendedAgent unmodified.
 func (p *Proxy) SignWithFlags(key ssh.PublicKey, data []byte, flags agent.SignatureFlags) (*ssh.Signature, error) {
+	return p.forward("sign-with-flags", key, func() (*ssh.Signature, error) {
+		return p.upstream.SignWithFlags(key, data, flags)
+	})
+}
+
+// forward applies the allow-list and deadline, then calls upstream.
+// One retry covers a transient "agent returned an error" during a
+// multi-commit rebase without the caller having to restart.
+func (p *Proxy) forward(op string, key ssh.PublicKey, call func() (*ssh.Signature, error)) (*ssh.Signature, error) {
 	if err := p.guard(key); err != nil {
 		return nil, err
 	}
-	return p.upstream.SignWithFlags(key, data, flags)
+	fp := ssh.FingerprintSHA256(key)
+	trace.Printf("proxied sign op=%s fingerprint=%s", op, fp)
+	sig, err := call()
+	if err == nil {
+		trace.Printf("proxied sign ok op=%s fingerprint=%s", op, fp)
+		return sig, nil
+	}
+	trace.Printf("proxied sign failed op=%s fingerprint=%s: %v", op, fp, err)
+	sig, err2 := call()
+	if err2 == nil {
+		trace.Printf("proxied sign ok after retry op=%s fingerprint=%s", op, fp)
+		return sig, nil
+	}
+	trace.Printf("proxied sign failed after retry op=%s fingerprint=%s: %v", op, fp, err2)
+	wrapped := usermsg.AnnotateRetried(err2)
+	// The sign error is also returned to the client. Printing it is best-effort:
+	// OpenSSH replaces agent failures with "agent returned an error".
+	_, _ = fmt.Fprintf(os.Stderr, "timeshare: %s\n", wrapped.Error())
+	return nil, wrapped
 }
 
 // Extension is not supported — this proxy only implements the standard

@@ -18,6 +18,7 @@ import (
 	"github.com/newtosh/timeshare/internal/config"
 	"github.com/newtosh/timeshare/internal/daemon"
 	"github.com/newtosh/timeshare/internal/tokenstore"
+	"github.com/newtosh/timeshare/internal/trace"
 	"github.com/newtosh/timeshare/internal/version"
 )
 
@@ -29,6 +30,9 @@ func main() {
 	if *showVersion {
 		fmt.Println(version.String())
 		return
+	}
+	if trace.EnvEnabled() {
+		trace.SetEnabled(true)
 	}
 
 	if *sockPath == "" {
@@ -78,10 +82,10 @@ func main() {
 		IdleTimeout: 30 * time.Minute,
 	}
 
-	log.Printf("timesharedd: listening on %s", *sockPath)
+	trace.Printf("timesharedd listening on %s", *sockPath)
 	if err := srv.Serve(ln); err != nil {
 		if errors.Is(err, daemon.ErrIdleTimeout) {
-			log.Print("timesharedd: idle timeout reached, exiting")
+			trace.Printf("timesharedd idle timeout reached, exiting")
 			os.Exit(0)
 		}
 		log.Fatalf("timesharedd: %v", err)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/newtosh/timeshare/internal/client"
 	"github.com/newtosh/timeshare/internal/daemon"
+	"github.com/newtosh/timeshare/internal/trace"
 
 	"github.com/spf13/cobra"
 )
@@ -13,7 +14,7 @@ import (
 func newLockCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "lock",
-		Short: "Evict all cached secrets for the current project",
+		Short: "Revoke this project's cached secrets and SSH grant",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
 			if err != nil {
@@ -25,12 +26,12 @@ func newLockCmd() *cobra.Command {
 			}
 
 			c := &client.Client{SocketPath: client.DefaultSocketPath(), DaemonBinary: daemonBinaryPath()}
-			_, err = c.Read(cmd.Context(), daemon.Request{ProjectID: projectID, Op: daemon.OpLock})
+			_, err = c.Do(cmd.Context(), daemon.Request{ProjectID: projectID, Op: daemon.OpLock, Debug: trace.Enabled()})
 			if err != nil {
 				return err
 			}
 
-			fmt.Println("Cache evicted for this project.")
+			fmt.Println("Pass revoked for this project.")
 			return nil
 		},
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/newtosh/timeshare/internal/client"
 	"github.com/newtosh/timeshare/internal/daemon"
+	"github.com/newtosh/timeshare/internal/trace"
 
 	"github.com/spf13/cobra"
 )
@@ -53,6 +54,7 @@ func newReadCmd() *cobra.Command {
 				TTL:          ttl,
 				Field:        cfg.FieldFor(secretName),
 				AllowedItems: cfg.ItemNames(),
+				Debug:        trace.Enabled(),
 			})
 			if err != nil {
 				return err
