@@ -5,11 +5,15 @@ import (
 	"errors"
 	"log"
 	"net"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/newtosh/timeshare/internal/backend"
 	"github.com/newtosh/timeshare/internal/cache"
 	"github.com/newtosh/timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/trace"
+	"github.com/newtosh/timeshare/internal/usermsg"
 )
 
 // ErrIdleTimeout is returned by Serve when IdleTimeout elapses with no
@@ -26,6 +30,16 @@ type Server struct {
 	Cache       *cache.Cache
 	Backend     backend.Backend
 	IdleTimeout time.Duration // zero means never self-exit
+	// Now overrides the clock for SSH grant expiry. Nil means time.Now.
+	// The secret cache has its own clock (cache.New).
+	Now func() time.Time
+	// ResolveFingerprints overrides op fingerprint lookup in tests.
+	ResolveFingerprints func(refs []string) ([]string, error)
+	// UpstreamSocket overrides SSH_AUTH_SOCK discovery in tests.
+	UpstreamSocket func() string
+
+	sshMu sync.Mutex
+	ssh   map[string]*sshState
 }
 
 // Serve accepts connections on ln until it errors (e.g. listener closed) or,
@@ -57,6 +71,12 @@ func (s *Server) Serve(ln net.Listener) error {
 		case err := <-errCh:
 			return err
 		case <-s.idleTimerC(idleTimer):
+			// A live pass (cached secret or SSH grant) must outlive the
+			// idle timer, or a 4h TTL would end at 30 minutes of quiet.
+			if s.hasLiveState() {
+				idleTimer = s.newIdleTimer()
+				continue
+			}
 			return ErrIdleTimeout
 		}
 	}
@@ -100,17 +120,20 @@ func (s *Server) HandleConn(conn net.Conn) {
 }
 
 func (s *Server) resolve(req Request) Response {
+	if req.Debug {
+		trace.SetEnabled(true)
+	}
 	switch req.Op {
 	case OpLock:
-		s.Cache.Evict(req.ProjectID + "\x00")
+		if s.Cache != nil {
+			s.Cache.Evict(req.ProjectID + "\x00")
+		}
+		s.revokeSSH(req.ProjectID)
 		return Response{}
 	case OpStatus:
-		// v1: confirms the daemon/cache is reachable for this project; per-
-		// entry TTL listing is deferred until Cache exposes an enumeration
-		// method (Cache.Get/Set/Evict cover read/write/evict, not listing,
-		// and adding one only for `status` isn't worth it until a second
-		// caller needs it too).
-		return Response{}
+		return Response{Passes: s.passes(req.ProjectID)}
+	case OpEnsureSSH:
+		return s.ensureSSH(req)
 	}
 
 	allowed := false
@@ -132,7 +155,7 @@ func (s *Server) resolve(req Request) Response {
 	cfg := reqToConfig(req)
 	value, ttl, err := s.Backend.Resolve(context.Background(), cfg, req.SecretName)
 	if err != nil {
-		return Response{Error: err.Error()}
+		return Response{Error: usermsg.Annotate(err).Error()}
 	}
 
 	// Config / --ttl always wins when set. Backend TTLs are only a
@@ -144,6 +167,31 @@ func (s *Server) resolve(req Request) Response {
 	}
 	s.Cache.Set(key, value, ttl)
 	return Response{Value: value}
+}
+
+func (s *Server) passes(projectID string) []Pass {
+	var passes []Pass
+	if s.Cache != nil && projectID != "" {
+		prefix := projectID + "\x00"
+		for _, m := range s.Cache.List(prefix) {
+			rest := strings.TrimPrefix(m.Key, prefix)
+			parts := strings.Split(rest, "\x00")
+			name := parts[0]
+			if len(parts) > 1 && parts[1] != "" {
+				name = name + " (" + parts[1] + ")"
+			}
+			passes = append(passes, Pass{Kind: "item", Name: name, ExpiresAt: m.ExpiresAt})
+		}
+	}
+	passes = append(passes, s.sshPasses(projectID)...)
+	return passes
+}
+
+func (s *Server) hasLiveState() bool {
+	if s.Cache != nil && len(s.Cache.List("")) > 0 {
+		return true
+	}
+	return s.hasLiveSSH()
 }
 
 func reqToConfig(req Request) config.Config {

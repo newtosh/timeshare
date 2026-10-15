@@ -4,10 +4,20 @@ A local, repo-scoped, TTL-caching secret bridge for 1Password.
 
 If a script or AI agent reads secrets from 1Password in a loop (`op read` N
 times), 1Password's biometric approval prompt fires N times. `timeshare`
-runs a small per-user background daemon that caches a resolved secret for a
-configurable TTL, so a repo's first read in that window prompts once and
-every read after that — until the TTL expires — doesn't touch 1Password
-again.
+runs a small per-user background daemon that caches a pass for a
+configurable TTL. The first `read` or `run` in that window is the approval.
+Later calls, including separate processes, reuse the pass and do not prompt
+again until the TTL expires or you run `timeshare lock`.
+
+What the daemon keeps, in memory only:
+
+| Mode | Cached | Clock starts |
+|---|---|---|
+| `items` | the resolved secret value, per item | the first successful read of that item |
+| `ssh_keys` | the key fingerprint (not a secret) and a proxy socket for the project | the first successful approval |
+
+Nothing in either cache is written to disk. A daemon restart forgets the
+pass; the next call approves again.
 
 ## Status
 
@@ -177,15 +187,24 @@ timeshare init --ssh-key=Private/deploy-key-prod --vault=my-project-secrets --mo
 # or pick interactively: bare `timeshare init` has a skippable "SSH keys" wizard step
 
 timeshare run -- git push
-# SSH_AUTH_SOCK points at a proxy, filtered to just the ssh_keys this
-# repo's .timeshare.yml lists, torn down when the command exits
+# SSH_AUTH_SOCK points at the daemon's proxy, filtered to the ssh_keys
+# this repo's .timeshare.yml lists. The proxy stays up for the TTL.
 ```
 
-The proxy never holds private key material — it forwards signing
-requests to your real 1Password SSH agent only for allow-listed keys,
-only within the repo's TTL window (same TTL as secrets). Past that
-window, or for any key not listed, the proxy refuses the request; your
-real 1Password agent and every other tool using it are unaffected.
+The proxy never holds private key material. It forwards signing requests
+to your real 1Password SSH agent only for allow-listed keys, and only
+while the project's pass is active. That pass uses the same configured
+TTL as item secrets: the first approved `timeshare run` in the window
+starts the clock, and later runs reuse the proxy with no new 1Password
+approval. `timeshare status` shows when the pass expires. `timeshare lock`
+revokes it. Past the window, or for any key not listed, the proxy refuses
+the request. Your real 1Password agent and every other tool using it are
+unaffected.
+
+`timeshare run` from a linked worktree or a submodule uses the git common
+directory as the project id, so a worktree shares the main checkout's
+pass. The worktree's own `.timeshare.yml` wins when it has one; otherwise
+timeshare reads the main checkout's file.
 
 **A config gotcha to know about:** if your `~/.ssh/config` sets
 `IdentityAgent` for a host (rather than relying on the `SSH_AUTH_SOCK`
@@ -208,13 +227,18 @@ that excludes repos you run through timeshare.
 | `timeshare --version` | Print embedded semver / commit / build date |
 | `timeshare init` | Scaffold a dedicated vault + `.timeshare.yml` for the current repo |
 | `timeshare read <name>` | Resolve one secret, print to stdout (drop-in for `op read`) |
-| `timeshare run -- <cmd>` | Resolve every item in `.timeshare.yml`, inject as env vars, exec `<cmd>` |
-| `timeshare status` | Confirm the daemon is reachable for the current project (non-zero exit if not) |
-| `timeshare lock` | Evict this project's cached secrets immediately |
-| `timeshare doctor` | Check: `op` on PATH, daemon socket reachable, `.timeshare.yml` present, and (if `ssh_keys` is set) the upstream SSH agent reachable — non-zero exit if any check fails |
+| `timeshare run -- <cmd>` | Resolve every item in `.timeshare.yml`, inject as env vars, point `SSH_AUTH_SOCK` at the project's proxy when `ssh_keys` is set, exec `<cmd>` |
+| `timeshare status` | Show the active pass (items and SSH keys) and when it expires. Auto-spawns the daemon when the config needs one. Prints "daemon not required" when it doesn't |
+| `timeshare lock` | Revoke this project's cached secrets and SSH grant immediately |
+| `timeshare doctor` | Check: `op` on PATH, `.timeshare.yml` present, the daemon (auto-spawned when the config needs it, or "daemon not required" when it doesn't), and (if `ssh_keys` is set) the upstream SSH agent — non-zero exit if any check fails |
 | `timeshare token store <vault>` / `token delete <vault>` | Manage a service-account token in the OS keychain (see below) |
 
 Run `timeshare <command> --help` for flags.
+
+`timeshare --verbose` (or `TIMESHARE_DEBUG=1`) traces each `op` invocation
+and each proxied sign. The daemon prints those lines on its stderr, so
+they show up when this process auto-spawned the daemon. A daemon that is
+already running keeps the setting it was started with.
 
 ## Service-account mode
 
@@ -262,11 +286,9 @@ pre-commit/pre-push hooks, and workflow conventions.
 
 ## Known gaps
 
-- `timeshare status` doesn't yet show per-secret TTLs (spec goal, not yet
-  implemented — the cache has no enumeration method).
-- `timeshare doctor` checks `op` on PATH, daemon reachable, config
-  present, and (if `ssh_keys` is set) the upstream SSH agent; it doesn't
-  yet check `op` version, token validity, or socket permission bits.
+- `timeshare doctor` checks `op` on PATH, the daemon, config present, and
+  (if `ssh_keys` is set) the upstream SSH agent; it doesn't yet check `op`
+  version, token validity, or socket permission bits.
 - No disk-persisted cache — a daemon restart mid-TTL-window means the next
   read re-prompts. Planned as a follow-up once the in-memory version has
   seen real use (see the design spec in `docs/superpowers/specs/`).

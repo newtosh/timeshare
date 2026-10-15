@@ -1,15 +1,19 @@
 package sshagent
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
+
+	"github.com/newtosh/timeshare/internal/trace"
 )
 
 // newUpstream returns a fresh in-memory keyring as an agent.ExtendedAgent.
@@ -134,6 +138,110 @@ func TestUnsupportedMethodsReturnError(t *testing.T) {
 	}
 	if _, err := p.Signers(); err == nil {
 		t.Error("expected Signers to fail")
+	}
+}
+
+type flakyAgent struct {
+	inner agent.ExtendedAgent
+	failN int
+	calls int
+	err   error
+}
+
+func (f *flakyAgent) List() ([]*agent.Key, error) { return f.inner.List() }
+func (f *flakyAgent) Sign(key ssh.PublicKey, data []byte) (*ssh.Signature, error) {
+	f.calls++
+	if f.calls <= f.failN {
+		return nil, f.err
+	}
+	return f.inner.Sign(key, data)
+}
+func (f *flakyAgent) SignWithFlags(key ssh.PublicKey, data []byte, flags agent.SignatureFlags) (*ssh.Signature, error) {
+	f.calls++
+	if f.calls <= f.failN {
+		return nil, f.err
+	}
+	return f.inner.SignWithFlags(key, data, flags)
+}
+func (f *flakyAgent) Extension(string, []byte) ([]byte, error) {
+	return nil, agent.ErrExtensionUnsupported
+}
+func (f *flakyAgent) Add(k agent.AddedKey) error     { return f.inner.Add(k) }
+func (f *flakyAgent) Remove(ssh.PublicKey) error     { return ErrNotSupported }
+func (f *flakyAgent) RemoveAll() error               { return ErrNotSupported }
+func (f *flakyAgent) Lock([]byte) error              { return ErrNotSupported }
+func (f *flakyAgent) Unlock([]byte) error            { return ErrNotSupported }
+func (f *flakyAgent) Signers() ([]ssh.Signer, error) { return nil, ErrNotSupported }
+
+func TestSignRetriesTransientAgentErrorOnce(t *testing.T) {
+	upstream := newUpstream()
+	pub, fp := addKey(t, upstream)
+	flaky := &flakyAgent{inner: upstream, failN: 1, err: errors.New("1Password: agent returned an error")}
+	p := NewProxy(flaky, []string{fp}, time.Now().Add(time.Hour))
+
+	sig, err := p.Sign(pub, []byte("commit"))
+	if err != nil {
+		t.Fatalf("retry should have succeeded: %v", err)
+	}
+	if sig == nil {
+		t.Fatal("expected a signature")
+	}
+	if flaky.calls != 2 {
+		t.Fatalf("upstream Sign calls = %d, want 2", flaky.calls)
+	}
+}
+
+func TestSignWithFlagsRetriesOnceThenReports(t *testing.T) {
+	upstream := newUpstream()
+	pub, fp := addKey(t, upstream)
+	flaky := &flakyAgent{inner: upstream, failN: 2, err: errors.New("1Password: agent returned an error")}
+	p := NewProxy(flaky, []string{fp}, time.Now().Add(time.Hour))
+
+	_, err := p.SignWithFlags(pub, []byte("commit"), 0)
+	if err == nil {
+		t.Fatal("expected error after the retry")
+	}
+	msg := err.Error()
+	for _, want := range []string{"retried the sign once", "agent returned an error", "Retry is safe"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("missing %q in %q", want, msg)
+		}
+	}
+	if flaky.calls != 2 {
+		t.Fatalf("upstream calls = %d, want 2", flaky.calls)
+	}
+}
+
+func TestProxiedSignIsTraced(t *testing.T) {
+	var buf bytes.Buffer
+	trace.SetOutput(&buf)
+	trace.SetEnabled(true)
+	t.Cleanup(func() {
+		trace.SetEnabled(false)
+		trace.SetOutput(os.Stderr)
+	})
+
+	upstream := newUpstream()
+	pub, fp := addKey(t, upstream)
+	p := NewProxy(upstream, []string{fp}, time.Now().Add(time.Hour))
+	if _, err := p.Sign(pub, []byte("commit")); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "proxied sign op=sign fingerprint="+fp) {
+		t.Fatalf("trace = %q", buf.String())
+	}
+}
+
+func TestSignDoesNotRetryLocalGuardFailure(t *testing.T) {
+	upstream := newUpstream()
+	pub, fp := addKey(t, upstream)
+	flaky := &flakyAgent{inner: upstream, err: errors.New("agent returned an error")}
+	p := NewProxy(flaky, []string{fp}, time.Now().Add(-time.Second))
+	if _, err := p.Sign(pub, []byte("commit")); err == nil {
+		t.Fatal("expected deadline error")
+	}
+	if flaky.calls != 0 {
+		t.Fatalf("expired grant must not contact upstream, calls=%d", flaky.calls)
 	}
 }
 

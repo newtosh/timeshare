@@ -175,9 +175,25 @@ if [ -n "$tag" ]; then
 fi
 
 build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+# Embed the tag's commit when git can see it. A peeled annotated tag
+# (refs/tags/vX^{}) is the commit; otherwise the tag object itself.
+commit=none
+if [ "$ver" != "dev" ] && command -v git >/dev/null 2>&1; then
+	raw=$(git ls-remote --tags "https://github.com/newtosh/timeshare.git" "refs/tags/${ver}" "refs/tags/${ver}^{}" 2>/dev/null || true)
+	commit=$(printf '%s\n' "$raw" | awk '
+		$2 ~ /\^\{\}$/ { peeled = substr($1, 1, 12) }
+		$2 !~ /\^\{\}$/ && $1 != "" { rawsha = substr($1, 1, 12) }
+		END {
+			if (peeled != "") print peeled
+			else if (rawsha != "") print rawsha
+		}')
+	case "$commit" in
+	""|*[!0-9a-f]*) commit=none ;;
+	esac
+fi
 ldflags="-s -w"
 ldflags="$ldflags -X github.com/newtosh/timeshare/internal/version.Version=${ver}"
-ldflags="$ldflags -X github.com/newtosh/timeshare/internal/version.Commit=none"
+ldflags="$ldflags -X github.com/newtosh/timeshare/internal/version.Commit=${commit}"
 ldflags="$ldflags -X github.com/newtosh/timeshare/internal/version.Date=${build_date}"
 
 # GOPRIVATE (not GOPROXY=direct): even with semver tags, proxy.golang.org can

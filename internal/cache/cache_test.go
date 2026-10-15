@@ -49,6 +49,24 @@ func TestExpiryUsesWallClockNotTimer(t *testing.T) {
 	}
 }
 
+func TestListSkipsExpiredAndOmitsValues(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	clock := func() time.Time { return now }
+	c := New(clock)
+	c.Set("p\x00LIVE", "secret-value", time.Hour)
+	c.Set("p\x00DEAD", "other-secret", time.Minute)
+	c.Set("q\x00OTHER", "nope", time.Hour)
+	now = now.Add(2 * time.Minute)
+
+	got := c.List("p\x00")
+	if len(got) != 1 || got[0].Key != "p\x00LIVE" {
+		t.Fatalf("got %+v", got)
+	}
+	if got[0].ExpiresAt.IsZero() {
+		t.Fatal("expected an expiry")
+	}
+}
+
 func TestEvictByProjectPrefix(t *testing.T) {
 	c := New(time.Now)
 	c.Set("proj-a\x00SECRET1", "v1", time.Hour)

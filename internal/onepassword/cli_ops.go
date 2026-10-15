@@ -12,6 +12,9 @@ import (
 	"fmt"
 	"net/url"
 	"os/exec"
+	"strings"
+
+	"github.com/newtosh/timeshare/internal/trace"
 )
 
 func runOp(args ...string) ([]byte, error) {
@@ -19,6 +22,7 @@ func runOp(args ...string) ([]byte, error) {
 }
 
 func runOpStdin(stdin []byte, args ...string) ([]byte, error) {
+	trace.Printf("op %s", redactOpArgs(args))
 	cmd := exec.Command("op", args...) //nolint:gosec // fixed binary name "op"; args are constructed by this package, not attacker-controlled
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -30,6 +34,28 @@ func runOpStdin(stdin []byte, args ...string) ([]byte, error) {
 		return nil, fmt.Errorf("op %v: %w: %s", args, err, stderr.String())
 	}
 	return stdout.Bytes(), nil
+}
+
+// redactOpArgs hides values passed as `password=...` (and similar)
+// so a debug trace of an `op item create` cannot echo a secret.
+// Arguments are still sent to op unchanged.
+func redactOpArgs(args []string) string {
+	safe := make([]string, len(args))
+	for i, a := range args {
+		eq := strings.IndexByte(a, '=')
+		if eq <= 0 {
+			safe[i] = a
+			continue
+		}
+		key := strings.ToLower(a[:eq])
+		switch key {
+		case "password", "credential", "token", "secret":
+			safe[i] = a[:eq] + "=<redacted>"
+		default:
+			safe[i] = a
+		}
+	}
+	return strings.Join(safe, " ")
 }
 
 func CreateVault(name string) (string, error) {

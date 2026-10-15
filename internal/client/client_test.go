@@ -130,7 +130,7 @@ func TestDefaultSocketPathIncludesProtocolGen(t *testing.T) {
 	// New request fields (e.g. Field) must not dial an older daemon that
 	// ignores unknown JSON; the path generation isolates the wire formats.
 	got := DefaultSocketPath()
-	if !strings.Contains(got, string(filepath.Separator)+"p2"+string(filepath.Separator)) {
+	if !strings.Contains(got, string(filepath.Separator)+"p3"+string(filepath.Separator)) {
 		t.Fatalf("DefaultSocketPath %q missing protocol generation segment", got)
 	}
 }

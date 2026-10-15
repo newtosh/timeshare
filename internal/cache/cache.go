@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -49,6 +50,34 @@ func (c *Cache) Set(key, value string, ttl time.Duration) {
 	defer c.mu.Unlock()
 
 	c.entries[key] = entry{value: value, expiresAt: c.now().Add(ttl)}
+}
+
+// Meta is a cache entry's identity and expiry. It deliberately has no
+// value: status listings must not copy secret material out of the cache.
+type Meta struct {
+	Key       string
+	ExpiresAt time.Time
+}
+
+// List returns unexpired entries whose key has prefix, in key order.
+// Expired entries are dropped as they are seen.
+func (c *Cache) List(prefix string) []Meta {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := c.now()
+	out := make([]Meta, 0)
+	for key, e := range c.entries {
+		if now.After(e.expiresAt) {
+			delete(c.entries, key)
+			continue
+		}
+		if strings.HasPrefix(key, prefix) {
+			out = append(out, Meta{Key: key, ExpiresAt: e.expiresAt})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
 }
 
 // Evict removes every entry whose key has the given prefix. Used for

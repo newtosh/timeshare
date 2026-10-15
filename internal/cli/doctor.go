@@ -9,7 +9,11 @@ import (
 
 	"github.com/newtosh/timeshare/internal/client"
 	"github.com/newtosh/timeshare/internal/config"
+	"github.com/newtosh/timeshare/internal/daemon"
 	"github.com/newtosh/timeshare/internal/onepassword"
+	"github.com/newtosh/timeshare/internal/sshagent"
+	"github.com/newtosh/timeshare/internal/trace"
+	"github.com/newtosh/timeshare/internal/usermsg"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -36,8 +40,41 @@ func newDoctorCmd() *cobra.Command {
 			}) {
 				failed++
 			}
-			if !check("daemon socket reachable", func() error {
+			var cfg config.Config
+			var projectID string
+			configLoaded := false
+			if !check(".timeshare.yml found", func() error {
+				cwd, err := os.Getwd()
+				if err != nil {
+					return err
+				}
+				loaded, id, err := LoadProjectContext(cwd)
+				cfg = loaded
+				projectID = id
+				return err
+			}) {
+				failed++
+			} else {
+				configLoaded = true
+			}
+
+			label, spawn := daemonCheckPlan(configLoaded, cfg)
+			if !check(label, func() error {
+				if !spawn && label == "daemon not required" {
+					return nil
+				}
 				c := &client.Client{SocketPath: client.DefaultSocketPath()}
+				if spawn {
+					c.DaemonBinary = daemonBinaryPath()
+					if _, err := c.Do(cmd.Context(), daemon.Request{
+						Op:        daemon.OpStatus,
+						ProjectID: projectID,
+						Debug:     trace.Enabled(),
+					}); err != nil {
+						return err
+					}
+					return nil
+				}
 				conn, err := c.PingSocket(cmd.Context())
 				if err == nil {
 					_ = conn.Close()
@@ -47,28 +84,15 @@ func newDoctorCmd() *cobra.Command {
 				failed++
 			}
 
-			var cfg config.Config
-			if !check(".timeshare.yml found", func() error {
-				cwd, err := os.Getwd()
-				if err != nil {
-					return err
-				}
-				loaded, _, err := LoadProjectContext(cwd)
-				cfg = loaded
-				return err
-			}) {
-				failed++
-			}
-
 			if len(cfg.SSHKeys) > 0 {
 				if !check("SSH agent reachable (needed for ssh_keys)", func() error {
-					path := upstreamAgentSocketPath()
+					path := sshagent.UpstreamSocketPath()
 					if path == "" {
 						return fmt.Errorf("could not determine upstream SSH agent socket path")
 					}
 					conn, err := net.Dial("unix", path)
 					if err != nil {
-						return err
+						return usermsg.Annotate(fmt.Errorf("connecting to upstream SSH agent at %s: %w", path, err))
 					}
 					return conn.Close()
 				}) {
@@ -100,6 +124,24 @@ func reportRefs(kind, passVerb string, n int, errs []error) int {
 		fmt.Println(failStyle.Render("✗ "+kind) + ": " + err.Error())
 	}
 	return len(errs)
+}
+
+// needsDaemon reports whether this config uses the daemon. Item values
+// and the SSH proxy both live there, so either list requires it. A
+// config with neither (Load rejects that) does not.
+func needsDaemon(cfg config.Config) bool {
+	return len(cfg.Items) > 0 || len(cfg.SSHKeys) > 0
+}
+
+// daemonCheckPlan decides the doctor/status daemon line. When the loaded
+// config needs the daemon, spawn is true and the caller auto-starts it.
+// When a loaded config needs nothing, the check is "daemon not required"
+// and passes without dialing.
+func daemonCheckPlan(loaded bool, cfg config.Config) (label string, spawn bool) {
+	if loaded && !needsDaemon(cfg) {
+		return "daemon not required", false
+	}
+	return "daemon socket reachable", loaded && needsDaemon(cfg)
 }
 
 // check runs fn, prints a pass/fail line, and reports whether it passed.
@@ -137,7 +179,7 @@ func verifyConfiguredSSHKeys(refs []string) []error {
 		}
 		vault, item := ref[:idx], ref[idx+1:]
 		if _, err := doctorGetSSHFingerprint(vault, item); err != nil {
-			errs = append(errs, fmt.Errorf("ssh_key %q: %w", ref, err))
+			errs = append(errs, fmt.Errorf("ssh_key %q: %w", ref, usermsg.Annotate(err)))
 		}
 	}
 	return errs
